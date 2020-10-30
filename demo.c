@@ -23,17 +23,14 @@ static void init(void) {
 
     // initial clear color
     state.pass_action = (sg_pass_action) {
-        .colors[0] = {
-            .action = SG_ACTION_CLEAR, 
-            .val = { 0.0f, 0.5f, 1.0f, 1.0 }
-        }
+        .colors[0] = { .action = SG_ACTION_CLEAR,  .val = { 0.0f, 0.5f, 1.0f, 1.0 } }
     };
 }
 
 static void frame(void) {
     const int width = sapp_width();
     const int height = sapp_height();
-    double delta_time = stm_sec(stm_round_to_common_refresh_rate(stm_laptime(&state.laptime)));
+    const double delta_time = stm_sec(stm_round_to_common_refresh_rate(stm_laptime(&state.laptime)));
     simgui_new_frame(width, height, delta_time);
 
     /*=== UI CODE STARTS HERE ===*/
