@@ -51,7 +51,7 @@ On Windows with the Visual Studio toolchain the exe is in a subdirectory:
 
 ## Notes:
 
-The repository contains a snapshots of the following libraries:
+The repository contains snapshots of the following libraries:
 
 - [Dear ImGui](https://github.com/ocornut/imgui)
 - [cimgui](https://github.com/cimgui/cimgui) (C bindings for Dear ImGui)
