@@ -20,10 +20,10 @@ Dear ImGui tools for Windows, Linux and macOS in C.
 > cmake --build .
 ```
 
-For an optimized release build:
+For an optimized release build replace ```cmake ..``` with:
 
 ```
-> cmake -DCMAKE_BUILD_TYPE=MINSIZEREL --build .
+> cmake -DCMAKE_BUILD_TYPE=MINSIZEREL ..
 ```
 
 NOTE: on Linux you'll also need to install the 'usual' dev-packages needed for X11+GL development.
