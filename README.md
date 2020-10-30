@@ -20,10 +20,18 @@ Dear ImGui tools for Windows, Linux and macOS in C.
 > cmake --build .
 ```
 
-For an optimized release build replace ```cmake ..``` with:
+To build a Release version on Linux and Mac:
 
 ```
-> cmake -DCMAKE_BUILD_TYPE=MINSIZEREL ..
+> cmake -DCMAKE_BUILD_TYPE=MinSizeRel ..
+> cmake --build .
+```
+
+To build a Release version on Windows with the VisualStudio toolchain:
+
+```
+> cmake ..
+> cmake --build . --config MinSizeRel
 ```
 
 NOTE: on Linux you'll also need to install the 'usual' dev-packages needed for X11+GL development.
@@ -38,6 +46,7 @@ On Linux and macOS:
 On Windows with the Visual Studio toolchain the exe is in a subdirectory:
 ```
 > Debug\demo.exe
+> MinSizeRel\demo.exe
 ```
 
 ## Notes:
