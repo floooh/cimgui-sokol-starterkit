@@ -30,6 +30,7 @@ endif()
 target_link_libraries(sokol cimgui)
 target_include_directories(sokol INTERFACE sokol)
 
+#=== EXECUTABLE: demo
 if(CMAKE_SYSTEM_NAME STREQUAL Windows)
     add_executable(demo WIN32 demo.c)
 else()
