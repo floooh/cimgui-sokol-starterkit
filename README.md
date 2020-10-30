@@ -26,6 +26,8 @@ For an optimized release build:
 > cmake -DCMAKE_BUILD_TYPE=MINSIZEREL --build .
 ```
 
+NOTE: on Linux you'll also need to install the 'usual' dev-packages needed for X11+GL development.
+
 ## Run:
 
 On Linux and macOS:
@@ -42,9 +44,9 @@ On Windows:
 
 The repository contains a snapshots of the following libraries:
 
-- Dear ImGui 
-- cimgui (C bindings for Dear ImGui)
-- sokol_gfx.h + sokol_app.h + sokol_imgui.h + sokol_time.h
+- [Dear ImGui](https://github.com/ocornut/imgui)
+- [cimgui](https://github.com/cimgui/cimgui) (C bindings for Dear ImGui)
+- [Sokol Headers](https://github.com/floooh/sokol) (only what's needed)
 
 I'm not planning to do regular updates to newer versions of those 
 files, so the versions contained in here may be behind. Updating
