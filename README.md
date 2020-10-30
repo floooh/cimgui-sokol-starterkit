@@ -48,7 +48,7 @@ The repository contains a snapshots of the following libraries:
 - [cimgui](https://github.com/cimgui/cimgui) (C bindings for Dear ImGui)
 - [Sokol Headers](https://github.com/floooh/sokol) (only what's needed)
 
-I'm not planning to do regular updates to newer versions of those 
+I'm not planning to do frequent updates to newer versions of those 
 files, so the versions contained in here may be behind. Updating
 your own copies is trivial though, just copy the new files from
 the original repositories over the files contained here.
