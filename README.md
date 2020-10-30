@@ -57,6 +57,6 @@ I tried to keep the CMake file as simple as possible (unfortunately
 it's not quite as simple as I had liked, because of some cross-platform
 differences).
 
-All the important code is in ```src/demo.c```.
+All the important code is in ```demo.c```.
 
 Enjoy!
