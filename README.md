@@ -35,9 +35,9 @@ On Linux and macOS:
 > ./demo
 ```
 
-On Windows:
+On Windows with the Visual Studio toolchain the exe is in a subdirectory:
 ```
-> demo.exe
+> Debug\demo.exe
 ```
 
 ## Notes:
