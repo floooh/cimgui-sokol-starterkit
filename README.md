@@ -62,7 +62,7 @@ the build directory, which can be opened with:
 
 ### Xcode (macOS)
 
-Replace ```cmake ..``` with ```cmake -Xcode ..``` and open the generated
+Replace ```cmake ..``` with ```cmake -GXcode ..``` and open the generated
 Xcode project:
 
 ```bash
