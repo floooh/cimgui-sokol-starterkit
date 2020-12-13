@@ -3,6 +3,8 @@
 A minimal cross-platform starter-kit to write simple
 Dear ImGui tools for Windows, Linux and macOS in C.
 
+[WASM version](https://floooh.github.io/cimgui-sokol-starterkit/) (see below for build instructions)
+
 ## Clone:
 
 ```bash
