@@ -48,13 +48,19 @@ else()
     add_executable(demo demo.c)
 endif()
 target_link_libraries(demo sokol)
+
+# Emscripten-specific linker options
 if (CMAKE_SYSTEM_NAME STREQUAL Emscripten)
-    target_link_options(demo PUBLIC --shell-file ../sokol/shell.html)
-    target_link_options(demo PUBLIC -sNO_FILESYSTEM=1 -sASSERTIONS=0 -sMALLOC=emmalloc --closure=1)
+    # use our own minimal shell.html
+    target_link_options(demo PRIVATE --shell-file ../sokol/shell.html)
+    # WASM+JS size optimizations
+    target_link_options(demo PRIVATE -sNO_FILESYSTEM=1 -sASSERTIONS=0 -sMALLOC=emmalloc --closure=1)
 endif()
+
 # explicitly strip dead code
 if (CMAKE_C_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_SYSTEM_NAME STREQUAL Emscripten)
     target_link_options(demo PRIVATE LINKER:-dead_strip)
 endif()
+
 # this hack removes the xxx-CMakeForceLinker.cxx dummy file
 set_target_properties(demo PROPERTIES LINKER_LANGUAGE C)
