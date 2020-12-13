@@ -74,6 +74,8 @@ To run the compilation result in the system web browser:
 > emrun demo.html
 ```
 
+...which should look like [this](https://floooh.github.io/cimgui-sokol-starterkit/).
+
 (this procedure should also work on Windows with ```make``` in the path, but
 is currently untested)
 
