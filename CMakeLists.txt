@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.0)
 project(cimgui-sokol-starterkit)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
+if (CMAKE_SYSTEM_NAME STREQUAL Emscripten)
+    set(CMAKE_EXECUTABLE_SUFFIX ".html")
+endif()
 
 #=== LIBRARY: cimgui + Dear ImGui
 add_library(cimgui STATIC 
@@ -45,5 +48,13 @@ else()
     add_executable(demo demo.c)
 endif()
 target_link_libraries(demo sokol)
+if (CMAKE_SYSTEM_NAME STREQUAL Emscripten)
+    target_link_options(demo PUBLIC --shell-file ../sokol/shell.html)
+    target_link_options(demo PUBLIC -sNO_FILESYSTEM=1 -sASSERTIONS=0 -sMALLOC=emmalloc --closure=1)
+endif()
+# explicitly strip dead code
+if (CMAKE_C_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_SYSTEM_NAME STREQUAL Emscripten)
+    target_link_options(demo PRIVATE LINKER:-dead_strip)
+endif()
 # this hack removes the xxx-CMakeForceLinker.cxx dummy file
 set_target_properties(demo PROPERTIES LINKER_LANGUAGE C)
