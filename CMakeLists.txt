@@ -7,7 +7,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL Emscripten)
 endif()
 
 # Linux -pthread shenanigans
-if (CMAKE_SYSTEM_NAME STREQUAL LINUX)
+if (CMAKE_SYSTEM_NAME STREQUAL Linux)
     set(THREADS_PREFER_PTHREAD_FLAG ON)
     find_package(Threads REQUIRED)
 endif()
@@ -45,7 +45,7 @@ else()
         target_link_libraries(sokol INTERFACE Threads::Threads)
     endif()
 endif()
-target_link_libraries(sokol cimgui)
+target_link_libraries(sokol PUBLIC cimgui)
 target_include_directories(sokol INTERFACE sokol)
 
 #=== EXECUTABLE: demo
