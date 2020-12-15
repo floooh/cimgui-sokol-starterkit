@@ -6,6 +6,12 @@ if (CMAKE_SYSTEM_NAME STREQUAL Emscripten)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
 endif()
 
+# Linux -pthread shenanigans
+if (CMAKE_SYSTEM_NAME STREQUAL LINUX)
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(Threads REQUIRED)
+endif()
+
 #=== LIBRARY: cimgui + Dear ImGui
 add_library(cimgui STATIC 
     cimgui/cimgui.cpp 
@@ -35,8 +41,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL Darwin)
 else()
     add_library(sokol STATIC sokol/sokol.c ${SOKOL_HEADERS})
     if (CMAKE_SYSTEM_NAME STREQUAL Linux)
-        target_compile_options(sokol PUBLIC -pthread)
-        target_link_libraries(sokol X11 Xi Xcursor GL dl pthread m)
+        target_link_libraries(sokol INTERFACE X11 Xi Xcursor GL dl m)
+        target_link_libraries(sokol INTERFACE Threads::Threads)
     endif()
 endif()
 target_link_libraries(sokol cimgui)
