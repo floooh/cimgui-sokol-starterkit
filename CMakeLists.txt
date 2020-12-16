@@ -8,8 +8,9 @@ endif()
 
 # Linux -pthread shenanigans
 if (CMAKE_SYSTEM_NAME STREQUAL Linux)
-    set(THREADS_PREFER_PTHREAD_FLAG ON)
-    find_package(Threads REQUIRED)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pthread")
 endif()
 
 #=== LIBRARY: cimgui + Dear ImGui
@@ -42,7 +43,6 @@ else()
     add_library(sokol STATIC sokol/sokol.c ${SOKOL_HEADERS})
     if (CMAKE_SYSTEM_NAME STREQUAL Linux)
         target_link_libraries(sokol INTERFACE X11 Xi Xcursor GL dl m)
-        target_link_libraries(sokol PUBLIC Threads::Threads)
     endif()
 endif()
 target_link_libraries(sokol PUBLIC cimgui)
