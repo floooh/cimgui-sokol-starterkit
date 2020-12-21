@@ -33,7 +33,7 @@ set(SOKOL_HEADERS
     sokol/sokol_glue.h)
 if(CMAKE_SYSTEM_NAME STREQUAL Darwin)
     add_library(sokol STATIC sokol/sokol.m ${SOKOL_HEADERS})
-    target_link_libraries(sokol
+    target_link_libraries(sokol PUBLIC
         "-framework QuartzCore"
         "-framework Cocoa"
         "-framework MetalKit"
