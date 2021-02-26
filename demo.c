@@ -23,7 +23,7 @@ static void init(void) {
 
     // initial clear color
     state.pass_action = (sg_pass_action) {
-        .colors[0] = { .action = SG_ACTION_CLEAR,  .val = { 0.0f, 0.5f, 1.0f, 1.0 } }
+        .colors[0] = { .action = SG_ACTION_CLEAR, .value = { 0.0f, 0.5f, 1.0f, 1.0 } }
     };
 }
 
@@ -37,7 +37,7 @@ static void frame(void) {
     igSetNextWindowPos((ImVec2){10,10}, ImGuiCond_Once, (ImVec2){0,0});
     igSetNextWindowSize((ImVec2){400, 100}, ImGuiCond_Once);
     igBegin("Hello Dear ImGui!", 0, ImGuiWindowFlags_None);
-    igColorEdit3("Background", &state.pass_action.colors[0].val[0], ImGuiColorEditFlags_None);
+    igColorEdit3("Background", &state.pass_action.colors[0].value.r, ImGuiColorEditFlags_None);
     igEnd();
     /*=== UI CODE ENDS HERE ===*/
 

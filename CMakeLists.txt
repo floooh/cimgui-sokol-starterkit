@@ -20,6 +20,7 @@ add_library(cimgui STATIC
     cimgui/imgui/imgui.h
     cimgui/imgui/imgui_widgets.cpp 
     cimgui/imgui/imgui_draw.cpp 
+    cimgui/imgui/imgui_tables.cpp
     cimgui/imgui/imgui_demo.cpp)
 target_include_directories(cimgui INTERFACE cimgui)
 
