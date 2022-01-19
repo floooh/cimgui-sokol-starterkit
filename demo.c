@@ -3,22 +3,17 @@
 //------------------------------------------------------------------------------
 #include "sokol_app.h"
 #include "sokol_gfx.h"
-#include "sokol_time.h"
 #include "sokol_glue.h"
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 #include "cimgui.h"
 #include "sokol_imgui.h"
 
 static struct {
-    uint64_t laptime;
     sg_pass_action pass_action;
 } state;
 
 static void init(void) {
-    sg_setup(&(sg_desc){
-        .context = sapp_sgcontext()
-    });
-    stm_setup();
+    sg_setup(&(sg_desc){ .context = sapp_sgcontext() });
     simgui_setup(&(simgui_desc_t){ 0 });
 
     // initial clear color
@@ -28,10 +23,12 @@ static void init(void) {
 }
 
 static void frame(void) {
-    const int width = sapp_width();
-    const int height = sapp_height();
-    const double delta_time = stm_sec(stm_round_to_common_refresh_rate(stm_laptime(&state.laptime)));
-    simgui_new_frame(width, height, delta_time);
+    simgui_new_frame(&(simgui_frame_desc_t){
+        .width = sapp_width(),
+        .height = sapp_height(),
+        .delta_time = sapp_frame_duration(),
+        .dpi_scale = sapp_dpi_scale(),
+    });
 
     /*=== UI CODE STARTS HERE ===*/
     igSetNextWindowPos((ImVec2){10,10}, ImGuiCond_Once, (ImVec2){0,0});
@@ -41,7 +38,7 @@ static void frame(void) {
     igEnd();
     /*=== UI CODE ENDS HERE ===*/
 
-    sg_begin_default_pass(&state.pass_action, width, height);
+    sg_begin_default_pass(&state.pass_action, sapp_width(), sapp_height());
     simgui_render();
     sg_end_pass();
     sg_commit();

@@ -84,10 +84,10 @@ is currently untested)
 ### Visual Studio (Windows)
 
 On Windows, cmake will automatically create a Visual Studio solution file in
-the build directory, which can be opened with:
+the build directory, which can be opened (inside the build directory) with:
 
 ```bash
-> start cimgui-sokol-starterkit.sln
+> cmake --open .
 ```
 
 ### Xcode (macOS)
@@ -97,7 +97,7 @@ Xcode project:
 
 ```bash
 > cmake -GXcode ..
-> open cimgui-sokol-starterkit.xcodeproj
+> cmake --open .
 ```
 
 ### Visual Studio Code (Windows, Linux, macOS)

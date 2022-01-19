@@ -2,10 +2,6 @@ cmake_minimum_required(VERSION 3.0)
 project(cimgui-sokol-starterkit)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
-if (CMAKE_SYSTEM_NAME STREQUAL Emscripten)
-    set(CMAKE_EXECUTABLE_SUFFIX ".html")
-endif()
-
 # Linux -pthread shenanigans
 if (CMAKE_SYSTEM_NAME STREQUAL Linux)
     set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -29,11 +25,11 @@ target_include_directories(cimgui INTERFACE cimgui)
 set(SOKOL_HEADERS
     sokol/sokol_gfx.h
     sokol/sokol_app.h
-    sokol/sokol_time.h
     sokol/sokol_imgui.h
     sokol/sokol_glue.h)
 if(CMAKE_SYSTEM_NAME STREQUAL Darwin)
-    add_library(sokol STATIC sokol/sokol.m ${SOKOL_HEADERS})
+    add_library(sokol STATIC sokol/sokol.c ${SOKOL_HEADERS})
+    target_compile_options(sokol PRIVATE -x objective-c)
     target_link_libraries(sokol PUBLIC
         "-framework QuartzCore"
         "-framework Cocoa"
@@ -60,6 +56,7 @@ target_link_libraries(demo sokol)
 
 # Emscripten-specific linker options
 if (CMAKE_SYSTEM_NAME STREQUAL Emscripten)
+    set(CMAKE_EXECUTABLE_SUFFIX ".html")
     # use our own minimal shell.html
     target_link_options(demo PRIVATE --shell-file ../sokol/shell.html)
     # WASM+JS size optimizations

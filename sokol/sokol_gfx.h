@@ -39,15 +39,18 @@
 
     Optionally provide the following defines with your own implementations:
 
-    SOKOL_ASSERT(c)     - your own assert macro (default: assert(c))
-    SOKOL_MALLOC(s)     - your own malloc function (default: malloc(s))
-    SOKOL_FREE(p)       - your own free function (default: free(p))
-    SOKOL_LOG(msg)      - your own logging function (default: puts(msg))
-    SOKOL_UNREACHABLE() - a guard macro for unreachable code (default: assert(false))
-    SOKOL_GFX_API_DECL  - public function declaration prefix (default: extern)
-    SOKOL_API_DECL      - same as SOKOL_GFX_API_DECL
-    SOKOL_API_IMPL      - public function implementation prefix (default: -)
-    SOKOL_TRACE_HOOKS   - enable trace hook callbacks (search below for TRACE HOOKS)
+    SOKOL_ASSERT(c)             - your own assert macro (default: assert(c))
+    SOKOL_MALLOC(s)             - your own malloc function (default: malloc(s))
+    SOKOL_FREE(p)               - your own free function (default: free(p))
+    SOKOL_LOG(msg)              - your own logging function (default: puts(msg))
+    SOKOL_UNREACHABLE()         - a guard macro for unreachable code (default: assert(false))
+    SOKOL_GFX_API_DECL          - public function declaration prefix (default: extern)
+    SOKOL_API_DECL              - same as SOKOL_GFX_API_DECL
+    SOKOL_API_IMPL              - public function implementation prefix (default: -)
+    SOKOL_TRACE_HOOKS           - enable trace hook callbacks (search below for TRACE HOOKS)
+    SOKOL_EXTERNAL_GL_LOADER    - indicates that you're using your own GL loader, in this case
+                                  sokol_gfx.h will not include any platform GL headers and disable
+                                  the integrated Win32 GL loader
 
     If sokol_gfx.h is compiled as a DLL, define the following before
     including the declaration or implementation:
@@ -126,7 +129,10 @@
 
     --- optionally update shader uniform data with:
 
-            sg_apply_uniforms(sg_shader_stage stage, int ub_index, const void* data, int num_bytes)
+            sg_apply_uniforms(sg_shader_stage stage, int ub_index, const sg_range* data)
+            
+        Read the section 'UNIFORM DATA LAYOUT' to learn about the expected memory layout
+        of the uniform data passed into sg_apply_uniforms().
 
     --- kick off a draw call with:
 
@@ -332,29 +338,128 @@
             with context information provided by sokol_app.h
 
     See the documention block of the sg_desc struct below for more information.
+    
+
+    UNIFORM DATA LAYOUT:
+    ====================
+    NOTE: if you use the sokol-shdc shader compiler tool, you don't need to worry
+    about the following details.
+
+    The data that's passed into the sg_apply_uniforms() function must adhere to
+    specific layout rules so that the GPU shader finds the uniform block
+    items at the right offset.
+
+    For the D3D11 and Metal backends, sokol-gfx only cares about the size of uniform
+    blocks, but not about the internal layout. The data will just be copied into
+    a uniform/constant buffer in a single operation and it's up you to arrange the
+    CPU-side layout so that it matches the GPU side layout. This also means that with
+    the D3D11 and Metal backends you are not limited to a 'cross-platform' subset
+    of uniform variable types.
+
+    If you ever only use one of the D3D11, Metal *or* WebGPU backend, you can stop reading here.
+
+    For the GL backends, the internal layout of uniform blocks matters though,
+    and you are limited to a small number of uniform variable types. This is
+    because sokol-gfx must be able to locate the uniform block members in order
+    to upload them to the GPU with glUniformXXX() calls.
+
+    To describe the uniform block layout to sokol-gfx, the following information
+    must be passed to the sg_make_shader() call in the sg_shader_desc struct:
+
+        - a hint about the used packing rule (either SG_UNIFORMLAYOUT_NATIVE or
+          SG_UNIFORMLAYOUT_STD140)
+        - a list of the uniform block members types in the correct order they
+          appear on the CPU side
+        
+    For example if the GLSL shader has the following uniform declarations:
+
+        uniform mat4 mvp;
+        uniform vec2 offset0;
+        uniform vec2 offset1;
+        uniform vec2 offset2;
+
+    ...and on the CPU side, there's a similar C struct:
+
+        typedef struct {
+            float mvp[16];
+            float offset0[2];
+            float offset1[2];
+            float offset2[2];
+        } params_t;
+
+    ...the uniform block description in the sg_shader_desc must look like this:
+
+        sg_shader_desc desc = {
+            .vs.uniform_blocks[0] = {
+                .size = sizeof(params_t),
+                .layout = SG_UNIFORMLAYOUT_NATIVE,  // this is the default and can be omitted
+                .uniforms = {
+                    // order must be the same as in 'params_t':
+                    [0] = { .name = "mvp", .type = SG_UNIFORMTYPE_MAT4 },
+                    [1] = { .name = "offset0", .type = SG_UNIFORMTYPE_VEC2 },
+                    [2] = { .name = "offset1", .type = SG_UNIFORMTYPE_VEC2 },
+                    [3] = { .name = "offset2", .type = SG_UNIFORMTYPE_VEC2 },
+                }
+            }
+        };
+
+    With this information sokol-gfx can now compute the correct offsets of the data items
+    within the uniform block struct.
+
+    The SG_UNIFORMLAYOUT_NATIVE packing rule works fine if only the GL backends are used,
+    but for proper D3D11/Metal/GL a subset of the std140 layout must be used which is
+    described in the next section:
+
+
+    CROSS-BACKEND COMMON UNIFORM DATA LAYOUT
+    ========================================
+    For cross-platform / cross-3D-backend code it is important that the same uniform block
+    layout on the CPU side can be used for all sokol-gfx backends. To achieve this, 
+    a common subset of the std140 layout must be used:
+
+    - The uniform block layout hint in sg_shader_desc must be explicitely set to
+      SG_UNIFORMLAYOUT_STD140.
+    - Only the following GLSL uniform types can be used (with their associated sokol-gfx enums):
+        - float => SG_UNIFORMTYPE_FLOAT
+        - vec2  => SG_UNIFORMTYPE_FLOAT2
+        - vec3  => SG_UNIFORMTYPE_FLOAT3
+        - vec4  => SG_UNIFORMTYPE_FLOAT4
+        - int   => SG_UNIFORMTYPE_INT
+        - ivec2 => SG_UNIFORMTYPE_INT2
+        - ivec3 => SG_UNIFORMTYPE_INT3
+        - ivec4 => SG_UNIFORMTYPE_INT4
+        - mat4  => SG_UNIFORMTYPE_MAT4
+    - Alignment for those types must be as follows (in bytes):
+        - float => 4
+        - vec2  => 8
+        - vec3  => 16
+        - vec4  => 16
+        - int   => 4
+        - ivec2 => 8
+        - ivec3 => 16
+        - ivec4 => 16
+        - mat4  => 16
+    - Arrays are only allowed for the following types: vec4, int4, mat4.
+          
+    Note that the HLSL cbuffer layout rules are slightly different from the
+    std140 layout rules, this means that the cbuffer declarations in HLSL code
+    must be tweaked so that the layout is compatible with std140.
+
+    The by far easiest way to tacke the common uniform block layout problem is
+    to use the sokol-shdc shader cross-compiler tool!
+
 
     BACKEND-SPECIFIC TOPICS:
     ========================
-    --- the GL backends need to know about the internal structure of uniform
-        blocks, and the texture sampler-name and -type:
-
-            typedef struct {
-                float mvp[16];      // model-view-projection matrix
-                float offset0[2];   // some 2D vectors
-                float offset1[2];
-                float offset2[2];
-            } params_t;
-
+    --- The GL backends need to know about the internal structure of uniform
+        blocks, and the texture sampler-name and -type. The uniform layout details
+        are  described in the UNIFORM DATA LAYOUT section above.
+        
             // uniform block structure and texture image definition in sg_shader_desc:
             sg_shader_desc desc = {
                 // uniform block description (size and internal structure)
                 .vs.uniform_blocks[0] = {
-                    .size = sizeof(params_t),
-                    .uniforms = {
-                        [0] = { .name="mvp", .type=SG_UNIFORMTYPE_MAT4 },
-                        [1] = { .name="offset0", .type=SG_UNIFORMTYPE_VEC2 },
-                        ...
-                    }
+                    ...
                 },
                 // one texture on the fragment-shader-stage, GLES2/WebGL needs name and image type
                 .fs.images[0] = { .name="tex", .type=SG_IMAGETYPE_ARRAY }
@@ -644,7 +749,7 @@ typedef struct sg_range {
 // disabling this for every includer isn't great, but the warnings are also quite pointless
 #if defined(_MSC_VER)
 #pragma warning(disable:4221)   /* /W4 only: nonstandard extension used: 'x': cannot be initialized using address of automatic variable 'y' */
-#pragma warning(disable:4202)   /* VS2015: nonstandard extension used: non-constant aggregate initializer */
+#pragma warning(disable:4204)   /* VS2015: nonstandard extension used: non-constant aggregate initializer */
 #endif
 #if defined(__cplusplus)
 #define SG_RANGE(x) sg_range{ &x, sizeof(x) }
@@ -868,7 +973,8 @@ typedef struct sg_limits {
     int max_image_size_3d;          // max width/height/depth of SG_IMAGETYPE_3D images
     int max_image_size_array;       // max width/height of SG_IMAGETYPE_ARRAY images
     int max_image_array_layers;     // max number of layers in SG_IMAGETYPE_ARRAY images
-    int max_vertex_attrs;           // <= SG_MAX_VERTEX_ATTRIBUTES (only on some GLES2 impls)
+    int max_vertex_attrs;           // <= SG_MAX_VERTEX_ATTRIBUTES or less (on some GLES2 impls)
+    int gl_max_vertex_uniform_vectors;  // <= GL_MAX_VERTEX_UNIFORM_VECTORS (only on GL backends)
 } sg_limits;
 
 /*
@@ -1204,11 +1310,57 @@ typedef enum sg_uniform_type {
     SG_UNIFORMTYPE_FLOAT2,
     SG_UNIFORMTYPE_FLOAT3,
     SG_UNIFORMTYPE_FLOAT4,
+    SG_UNIFORMTYPE_INT,
+    SG_UNIFORMTYPE_INT2,
+    SG_UNIFORMTYPE_INT3,
+    SG_UNIFORMTYPE_INT4,
     SG_UNIFORMTYPE_MAT4,
     _SG_UNIFORMTYPE_NUM,
     _SG_UNIFORMTYPE_FORCE_U32 = 0x7FFFFFFF
 } sg_uniform_type;
 
+/*
+    sg_uniform_layout
+    
+    A hint for the interior memory layout of uniform blocks. This is
+    only really relevant for the GL backend where the internal layout
+    of uniform blocks must be known to sokol-gfx. For all other backends the
+    internal memory layout of uniform blocks doesn't matter, sokol-gfx
+    will just pass uniform data as a single memory blob to the
+    3D backend.
+    
+    SG_UNIFORMLAYOUT_NATIVE (default)
+        Native layout means that a 'backend-native' memory layout
+        is used. For the GL backend this means that uniforms
+        are packed tightly in memory (e.g. there are no padding
+        bytes).
+        
+    SG_UNIFORMLAYOUT_STD140
+        The memory layout is a subset of std140. Arrays are only
+        allowed for the FLOAT4, INT4 and MAT4. Alignment is as
+        is as follows:
+        
+            FLOAT, INT:         4 byte alignment
+            FLOAT2, INT2:       8 byte alignment
+            FLOAT3, INT3:       16 byte alignment(!)
+            FLOAT4, INT4:       16 byte alignment
+            MAT4:               16 byte alignment
+            FLOAT4[], INT4[]:   16 byte alignment
+            
+        The overall size of the uniform block must be a multiple
+        of 16.
+        
+    For more information search for 'UNIFORM DATA LAYOUT' in the documentation block
+    at the start of the header.
+*/
+typedef enum sg_uniform_layout {
+    _SG_UNIFORMLAYOUT_DEFAULT,     /* value 0 reserved for default-init */
+    SG_UNIFORMLAYOUT_NATIVE,       /* default: layout depends on currently active backend */
+    SG_UNIFORMLAYOUT_STD140,       /* std140: memory layout according to std140 */
+    _SG_UNIFORMLAYOUT_NUM,
+    _SG_UNIFORMLAYOUT_FORCE_U32 = 0x7FFFFFFF
+} sg_uniform_layout;
+ 
 /*
     sg_cull_mode
 
@@ -1710,6 +1862,7 @@ typedef struct sg_image_desc {
           defaults are "vs_4_0" and "ps_4_0")
         - reflection info for each uniform block used by the shader stage:
             - the size of the uniform block in bytes
+            - a memory layout hint (native vs std140, only required for GL backends)
             - reflection info for each uniform block member (only required for GL backends):
                 - member name
                 - member type (SG_UNIFORMTYPE_xxx)
@@ -1742,6 +1895,7 @@ typedef struct sg_shader_uniform_desc {
 
 typedef struct sg_shader_uniform_block_desc {
     size_t size;
+    sg_uniform_layout layout;
     sg_shader_uniform_desc uniforms[SG_MAX_UB_MEMBERS];
 } sg_shader_uniform_block_desc;
 
@@ -2506,8 +2660,329 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
 #pragma warning(disable:4055)   /* 'type cast': from data pointer */
 #endif
 
-#if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+#if defined(SOKOL_D3D11)
+    #ifndef D3D11_NO_HELPERS
+    #define D3D11_NO_HELPERS
+    #endif
+    #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOMINMAX
+    #define NOMINMAX
+    #endif
+    #include <d3d11.h>
+    #include <d3dcompiler.h>
+    #ifdef _MSC_VER
+    #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
+        #pragma comment (lib, "WindowsApp")
+    #else
+        #pragma comment (lib, "kernel32")
+        #pragma comment (lib, "user32")
+        #pragma comment (lib, "dxgi")
+        #pragma comment (lib, "d3d11")
+    #endif
+    #endif
+#elif defined(SOKOL_METAL)
+    // see https://clang.llvm.org/docs/LanguageExtensions.html#automatic-reference-counting
+    #if !defined(__cplusplus)
+        #if __has_feature(objc_arc) && !__has_feature(objc_arc_fields)
+            #error "sokol_gfx.h requires __has_feature(objc_arc_field) if ARC is enabled (use a more recent compiler version)"
+        #endif
+    #endif
+    #include <TargetConditionals.h>
+    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+        #define _SG_TARGET_MACOS (1)
+    #else
+        #define _SG_TARGET_IOS (1)
+        #if defined(TARGET_IPHONE_SIMULATOR) && TARGET_IPHONE_SIMULATOR
+            #define _SG_TARGET_IOS_SIMULATOR (1)
+        #endif
+    #endif
+    #import <Metal/Metal.h>
+#elif defined(SOKOL_WGPU)
+    #if defined(__EMSCRIPTEN__)
+        #include <webgpu/webgpu.h>
+    #else
+        #include <dawn/webgpu.h>
+    #endif
+#elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
     #define _SOKOL_ANY_GL (1)
+
+    // include platform specific GL headers (or on Win32: use an embedded GL loader)
+    #if !defined(SOKOL_EXTERNAL_GL_LOADER)
+        #if defined(_WIN32)
+            #if defined(SOKOL_GLCORE33) && !defined(SOKOL_EXTERNAL_GL_LOADER)
+                #ifndef WIN32_LEAN_AND_MEAN
+                #define WIN32_LEAN_AND_MEAN
+                #endif
+                #ifndef NOMINMAX
+                #define NOMINMAX
+                #endif
+                #include <windows.h>
+                #define _SOKOL_USE_WIN32_GL_LOADER (1)
+                #pragma comment (lib, "kernel32")   // GetProcAddress()
+            #endif
+        #elif defined(__APPLE__)
+            #include <TargetConditionals.h>
+            #ifndef GL_SILENCE_DEPRECATION
+                #define GL_SILENCE_DEPRECATION
+            #endif
+            #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+                #include <OpenGL/gl3.h>
+            #else
+                #include <OpenGLES/ES3/gl.h>
+                #include <OpenGLES/ES3/glext.h>
+            #endif
+        #elif defined(__EMSCRIPTEN__) || defined(__ANDROID__)
+            #if defined(SOKOL_GLES3)
+                #include <GLES3/gl3.h>
+            #elif defined(SOKOL_GLES2)
+                #ifndef GL_EXT_PROTOTYPES
+                #define GL_GLEXT_PROTOTYPES
+                #endif
+                #include <GLES2/gl2.h>
+                #include <GLES2/gl2ext.h>
+            #endif
+        #elif defined(__linux__) || defined(__unix__)
+            #define GL_GLEXT_PROTOTYPES
+            #include <GL/gl.h>
+        #endif
+    #endif
+
+    // optional GL loader definitions (only on Win32)
+    #if defined(_SOKOL_USE_WIN32_GL_LOADER)
+        #define __gl_h_ 1
+        #define __gl32_h_ 1
+        #define __gl31_h_ 1
+        #define __GL_H__ 1
+        #define __glext_h_ 1
+        #define __GLEXT_H_ 1
+        #define __gltypes_h_ 1
+        #define __glcorearb_h_ 1
+        #define __gl_glcorearb_h_ 1
+        #define GL_APIENTRY APIENTRY
+
+        typedef unsigned int  GLenum;
+        typedef unsigned int  GLuint;
+        typedef int  GLsizei;
+        typedef char  GLchar;
+        typedef ptrdiff_t  GLintptr;
+        typedef ptrdiff_t  GLsizeiptr;
+        typedef double  GLclampd;
+        typedef unsigned short  GLushort;
+        typedef unsigned char  GLubyte;
+        typedef unsigned char  GLboolean;
+        typedef uint64_t  GLuint64;
+        typedef double  GLdouble;
+        typedef unsigned short  GLhalf;
+        typedef float  GLclampf;
+        typedef unsigned int  GLbitfield;
+        typedef signed char  GLbyte;
+        typedef short  GLshort;
+        typedef void  GLvoid;
+        typedef int64_t  GLint64;
+        typedef float  GLfloat;
+        typedef struct __GLsync * GLsync;
+        typedef int  GLint;
+        #define GL_INT_2_10_10_10_REV 0x8D9F
+        #define GL_R32F 0x822E
+        #define GL_PROGRAM_POINT_SIZE 0x8642
+        #define GL_STENCIL_ATTACHMENT 0x8D20
+        #define GL_DEPTH_ATTACHMENT 0x8D00
+        #define GL_COLOR_ATTACHMENT2 0x8CE2
+        #define GL_COLOR_ATTACHMENT0 0x8CE0
+        #define GL_R16F 0x822D
+        #define GL_COLOR_ATTACHMENT22 0x8CF6
+        #define GL_DRAW_FRAMEBUFFER 0x8CA9
+        #define GL_FRAMEBUFFER_COMPLETE 0x8CD5
+        #define GL_NUM_EXTENSIONS 0x821D
+        #define GL_INFO_LOG_LENGTH 0x8B84
+        #define GL_VERTEX_SHADER 0x8B31
+        #define GL_INCR 0x1E02
+        #define GL_DYNAMIC_DRAW 0x88E8
+        #define GL_STATIC_DRAW 0x88E4
+        #define GL_TEXTURE_CUBE_MAP_POSITIVE_Z 0x8519
+        #define GL_TEXTURE_CUBE_MAP 0x8513
+        #define GL_FUNC_SUBTRACT 0x800A
+        #define GL_FUNC_REVERSE_SUBTRACT 0x800B
+        #define GL_CONSTANT_COLOR 0x8001
+        #define GL_DECR_WRAP 0x8508
+        #define GL_R8 0x8229
+        #define GL_LINEAR_MIPMAP_LINEAR 0x2703
+        #define GL_ELEMENT_ARRAY_BUFFER 0x8893
+        #define GL_SHORT 0x1402
+        #define GL_DEPTH_TEST 0x0B71
+        #define GL_TEXTURE_CUBE_MAP_NEGATIVE_Y 0x8518
+        #define GL_LINK_STATUS 0x8B82
+        #define GL_TEXTURE_CUBE_MAP_POSITIVE_Y 0x8517
+        #define GL_SAMPLE_ALPHA_TO_COVERAGE 0x809E
+        #define GL_RGBA16F 0x881A
+        #define GL_CONSTANT_ALPHA 0x8003
+        #define GL_READ_FRAMEBUFFER 0x8CA8
+        #define GL_TEXTURE0 0x84C0
+        #define GL_TEXTURE_MIN_LOD 0x813A
+        #define GL_CLAMP_TO_EDGE 0x812F
+        #define GL_UNSIGNED_SHORT_5_6_5 0x8363
+        #define GL_TEXTURE_WRAP_R 0x8072
+        #define GL_UNSIGNED_SHORT_5_5_5_1 0x8034
+        #define GL_NEAREST_MIPMAP_NEAREST 0x2700
+        #define GL_UNSIGNED_SHORT_4_4_4_4 0x8033
+        #define GL_SRC_ALPHA_SATURATE 0x0308
+        #define GL_STREAM_DRAW 0x88E0
+        #define GL_ONE 1
+        #define GL_NEAREST_MIPMAP_LINEAR 0x2702
+        #define GL_RGB10_A2 0x8059
+        #define GL_RGBA8 0x8058
+        #define GL_COLOR_ATTACHMENT1 0x8CE1
+        #define GL_RGBA4 0x8056
+        #define GL_RGB8 0x8051
+        #define GL_ARRAY_BUFFER 0x8892
+        #define GL_STENCIL 0x1802
+        #define GL_TEXTURE_2D 0x0DE1
+        #define GL_DEPTH 0x1801
+        #define GL_FRONT 0x0404
+        #define GL_STENCIL_BUFFER_BIT 0x00000400
+        #define GL_REPEAT 0x2901
+        #define GL_RGBA 0x1908
+        #define GL_TEXTURE_CUBE_MAP_POSITIVE_X 0x8515
+        #define GL_DECR 0x1E03
+        #define GL_FRAGMENT_SHADER 0x8B30
+        #define GL_FLOAT 0x1406
+        #define GL_TEXTURE_MAX_LOD 0x813B
+        #define GL_DEPTH_COMPONENT 0x1902
+        #define GL_ONE_MINUS_DST_ALPHA 0x0305
+        #define GL_COLOR 0x1800
+        #define GL_TEXTURE_2D_ARRAY 0x8C1A
+        #define GL_TRIANGLES 0x0004
+        #define GL_UNSIGNED_BYTE 0x1401
+        #define GL_TEXTURE_MAG_FILTER 0x2800
+        #define GL_ONE_MINUS_CONSTANT_ALPHA 0x8004
+        #define GL_NONE 0
+        #define GL_SRC_COLOR 0x0300
+        #define GL_BYTE 0x1400
+        #define GL_TEXTURE_CUBE_MAP_NEGATIVE_Z 0x851A
+        #define GL_LINE_STRIP 0x0003
+        #define GL_TEXTURE_3D 0x806F
+        #define GL_CW 0x0900
+        #define GL_LINEAR 0x2601
+        #define GL_RENDERBUFFER 0x8D41
+        #define GL_GEQUAL 0x0206
+        #define GL_COLOR_BUFFER_BIT 0x00004000
+        #define GL_RGBA32F 0x8814
+        #define GL_BLEND 0x0BE2
+        #define GL_ONE_MINUS_SRC_ALPHA 0x0303
+        #define GL_ONE_MINUS_CONSTANT_COLOR 0x8002
+        #define GL_TEXTURE_WRAP_T 0x2803
+        #define GL_TEXTURE_WRAP_S 0x2802
+        #define GL_TEXTURE_MIN_FILTER 0x2801
+        #define GL_LINEAR_MIPMAP_NEAREST 0x2701
+        #define GL_EXTENSIONS 0x1F03
+        #define GL_NO_ERROR 0
+        #define GL_REPLACE 0x1E01
+        #define GL_KEEP 0x1E00
+        #define GL_CCW 0x0901
+        #define GL_TEXTURE_CUBE_MAP_NEGATIVE_X 0x8516
+        #define GL_RGB 0x1907
+        #define GL_TRIANGLE_STRIP 0x0005
+        #define GL_FALSE 0
+        #define GL_ZERO 0
+        #define GL_CULL_FACE 0x0B44
+        #define GL_INVERT 0x150A
+        #define GL_INT 0x1404
+        #define GL_UNSIGNED_INT 0x1405
+        #define GL_UNSIGNED_SHORT 0x1403
+        #define GL_NEAREST 0x2600
+        #define GL_SCISSOR_TEST 0x0C11
+        #define GL_LEQUAL 0x0203
+        #define GL_STENCIL_TEST 0x0B90
+        #define GL_DITHER 0x0BD0
+        #define GL_DEPTH_COMPONENT16 0x81A5
+        #define GL_EQUAL 0x0202
+        #define GL_FRAMEBUFFER 0x8D40
+        #define GL_RGB5 0x8050
+        #define GL_LINES 0x0001
+        #define GL_DEPTH_BUFFER_BIT 0x00000100
+        #define GL_SRC_ALPHA 0x0302
+        #define GL_INCR_WRAP 0x8507
+        #define GL_LESS 0x0201
+        #define GL_MULTISAMPLE 0x809D
+        #define GL_FRAMEBUFFER_BINDING 0x8CA6
+        #define GL_BACK 0x0405
+        #define GL_ALWAYS 0x0207
+        #define GL_FUNC_ADD 0x8006
+        #define GL_ONE_MINUS_DST_COLOR 0x0307
+        #define GL_NOTEQUAL 0x0205
+        #define GL_DST_COLOR 0x0306
+        #define GL_COMPILE_STATUS 0x8B81
+        #define GL_RED 0x1903
+        #define GL_COLOR_ATTACHMENT3 0x8CE3
+        #define GL_DST_ALPHA 0x0304
+        #define GL_RGB5_A1 0x8057
+        #define GL_GREATER 0x0204
+        #define GL_POLYGON_OFFSET_FILL 0x8037
+        #define GL_TRUE 1
+        #define GL_NEVER 0x0200
+        #define GL_POINTS 0x0000
+        #define GL_ONE_MINUS_SRC_COLOR 0x0301
+        #define GL_MIRRORED_REPEAT 0x8370
+        #define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 0x8B4D
+        #define GL_R11F_G11F_B10F 0x8C3A
+        #define GL_UNSIGNED_INT_10F_11F_11F_REV 0x8C3B
+        #define GL_RGBA32UI 0x8D70
+        #define GL_RGB32UI 0x8D71
+        #define GL_RGBA16UI 0x8D76
+        #define GL_RGB16UI 0x8D77
+        #define GL_RGBA8UI 0x8D7C
+        #define GL_RGB8UI 0x8D7D
+        #define GL_RGBA32I 0x8D82
+        #define GL_RGB32I 0x8D83
+        #define GL_RGBA16I 0x8D88
+        #define GL_RGB16I 0x8D89
+        #define GL_RGBA8I 0x8D8E
+        #define GL_RGB8I 0x8D8F
+        #define GL_RED_INTEGER 0x8D94
+        #define GL_RG 0x8227
+        #define GL_RG_INTEGER 0x8228
+        #define GL_R8 0x8229
+        #define GL_R16 0x822A
+        #define GL_RG8 0x822B
+        #define GL_RG16 0x822C
+        #define GL_R16F 0x822D
+        #define GL_R32F 0x822E
+        #define GL_RG16F 0x822F
+        #define GL_RG32F 0x8230
+        #define GL_R8I 0x8231
+        #define GL_R8UI 0x8232
+        #define GL_R16I 0x8233
+        #define GL_R16UI 0x8234
+        #define GL_R32I 0x8235
+        #define GL_R32UI 0x8236
+        #define GL_RG8I 0x8237
+        #define GL_RG8UI 0x8238
+        #define GL_RG16I 0x8239
+        #define GL_RG16UI 0x823A
+        #define GL_RG32I 0x823B
+        #define GL_RG32UI 0x823C
+        #define GL_RGBA_INTEGER 0x8D99
+        #define GL_R8_SNORM 0x8F94
+        #define GL_RG8_SNORM 0x8F95
+        #define GL_RGB8_SNORM 0x8F96
+        #define GL_RGBA8_SNORM 0x8F97
+        #define GL_R16_SNORM 0x8F98
+        #define GL_RG16_SNORM 0x8F99
+        #define GL_RGB16_SNORM 0x8F9A
+        #define GL_RGBA16_SNORM 0x8F9B
+        #define GL_RGBA16 0x805B
+        #define GL_MAX_TEXTURE_SIZE 0x0D33
+        #define GL_MAX_CUBE_MAP_TEXTURE_SIZE 0x851C
+        #define GL_MAX_3D_TEXTURE_SIZE 0x8073
+        #define GL_MAX_ARRAY_TEXTURE_LAYERS 0x88FF
+        #define GL_MAX_VERTEX_ATTRIBS 0x8869
+        #define GL_CLAMP_TO_BORDER 0x812D
+        #define GL_TEXTURE_BORDER_COLOR 0x1004
+        #define GL_CURRENT_PROGRAM 0x8B8D
+        #define GL_MAX_VERTEX_UNIFORM_VECTORS 0x8DFB
+    #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
     #define GL_UNSIGNED_INT_2_10_10_10_REV 0x8368
@@ -2595,73 +3070,26 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
     #endif
 
     #ifdef SOKOL_GLES2
-    #   ifdef GL_ANGLE_instanced_arrays
-    #       define SOKOL_INSTANCING_ENABLED
-    #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
-    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedANGLE(mode, count, type, indices, instancecount)
-    #       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorANGLE(index, divisor)
-    #   elif defined(GL_EXT_draw_instanced) && defined(GL_EXT_instanced_arrays)
-    #       define SOKOL_INSTANCING_ENABLED
-    #       define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
-    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
-    #       define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
-    #   else
-    #       define SOKOL_GLES2_INSTANCING_ERROR "Select GL_ANGLE_instanced_arrays or (GL_EXT_draw_instanced & GL_EXT_instanced_arrays) to enable instancing in GLES2"
-    #       define glDrawArraysInstanced(mode, first, count, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-    #       define glDrawElementsInstanced(mode, count, type, indices, instancecount) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-    #       define glVertexAttribDivisor(index, divisor) SOKOL_ASSERT(0 && SOKOL_GLES2_INSTANCING_ERROR)
-    #   endif
+        #ifdef GL_ANGLE_instanced_arrays
+            #define _SOKOL_GL_INSTANCING_ENABLED
+            #define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedANGLE(mode, first, count, instancecount)
+            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedANGLE(mode, count, type, indices, instancecount)
+            #define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorANGLE(index, divisor)
+        #elif defined(GL_EXT_draw_instanced) && defined(GL_EXT_instanced_arrays)
+            #define _SOKOL_GL_INSTANCING_ENABLED
+            #define glDrawArraysInstanced(mode, first, count, instancecount)  glDrawArraysInstancedEXT(mode, first, count, instancecount)
+            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) glDrawElementsInstancedEXT(mode, count, type, indices, instancecount)
+            #define glVertexAttribDivisor(index, divisor) glVertexAttribDivisorEXT(index, divisor)
+        #else
+            #define _SOKOL_GLES2_INSTANCING_ERROR "Select GL_ANGLE_instanced_arrays or (GL_EXT_draw_instanced & GL_EXT_instanced_arrays) to enable instancing in GLES2"
+            #define glDrawArraysInstanced(mode, first, count, instancecount) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
+            #define glDrawElementsInstanced(mode, count, type, indices, instancecount) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
+            #define glVertexAttribDivisor(index, divisor) SOKOL_ASSERT(0 && _SOKOL_GLES2_INSTANCING_ERROR)
+        #endif
     #else
-    #   define SOKOL_INSTANCING_ENABLED
+        #define _SOKOL_GL_INSTANCING_ENABLED
     #endif
     #define _SG_GL_CHECK_ERROR() { SOKOL_ASSERT(glGetError() == GL_NO_ERROR); }
-
-#elif defined(SOKOL_D3D11)
-    #ifndef D3D11_NO_HELPERS
-    #define D3D11_NO_HELPERS
-    #endif
-    #ifndef WIN32_LEAN_AND_MEAN
-    #define WIN32_LEAN_AND_MEAN
-    #endif
-    #ifndef NOMINMAX
-    #define NOMINMAX
-    #endif
-    #include <d3d11.h>
-    #include <d3dcompiler.h>
-    #ifdef _MSC_VER
-    #if (defined(WINAPI_FAMILY_PARTITION) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP))
-        #pragma comment (lib, "WindowsApp")
-    #else
-        #pragma comment (lib, "kernel32")
-        #pragma comment (lib, "user32")
-        #pragma comment (lib, "dxgi")
-        #pragma comment (lib, "d3d11")
-        #pragma comment (lib, "dxguid")
-    #endif
-    #endif
-#elif defined(SOKOL_METAL)
-    // see https://clang.llvm.org/docs/LanguageExtensions.html#automatic-reference-counting
-    #if !defined(__cplusplus)
-        #if __has_feature(objc_arc) && !__has_feature(objc_arc_fields)
-            #error "sokol_app.h requires __has_feature(objc_arc_field) if ARC is enabled (use a more recent compiler version)"
-        #endif
-    #endif
-    #include <TargetConditionals.h>
-    #import <Metal/Metal.h>
-    #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
-        #define _SG_TARGET_MACOS (1)
-    #else
-        #define _SG_TARGET_IOS (1)
-        #if defined(TARGET_IPHONE_SIMULATOR) && TARGET_IPHONE_SIMULATOR
-            #define _SG_TARGET_IOS_SIMULATOR (1)
-        #endif
-    #endif
-#elif defined(SOKOL_WGPU)
-    #if defined(__EMSCRIPTEN__)
-        #include <webgpu/webgpu.h>
-    #else
-        #include <dawn/webgpu.h>
-    #endif
 #endif
 
 /*=== COMMON BACKEND STUFF ===================================================*/
@@ -2698,10 +3126,10 @@ typedef struct {
 /* helper macros */
 #define _sg_def(val, def) (((val) == 0) ? (def) : (val))
 #define _sg_def_flt(val, def) (((val) == 0.0f) ? (def) : (val))
-#define _sg_min(a,b) ((a<b)?a:b)
-#define _sg_max(a,b) ((a>b)?a:b)
-#define _sg_clamp(v,v0,v1) ((v<v0)?(v0):((v>v1)?(v1):(v)))
-#define _sg_fequal(val,cmp,delta) (((val-cmp)> -delta)&&((val-cmp)<delta))
+#define _sg_min(a,b) (((a)<(b))?(a):(b))
+#define _sg_max(a,b) (((a)>(b))?(a):(b))
+#define _sg_clamp(v,v0,v1) (((v)<(v0))?(v0):(((v)>(v1))?(v1):(v)))
+#define _sg_fequal(val,cmp,delta) ((((val)-(cmp))> -(delta))&&(((val)-(cmp))<(delta)))
 
 typedef struct {
     int size;
@@ -2820,6 +3248,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
 typedef struct {
     sg_shader shader_id;
     sg_index_type index_type;
+    bool use_instanced_draw;
     bool vertex_layout_valid[SG_MAX_SHADERSTAGE_BUFFERS];
     int color_attachment_count;
     sg_pixel_format color_formats[SG_MAX_COLOR_ATTACHMENTS];
@@ -2832,9 +3261,10 @@ typedef struct {
 } _sg_pipeline_common_t;
 
 _SOKOL_PRIVATE void _sg_pipeline_common_init(_sg_pipeline_common_t* cmn, const sg_pipeline_desc* desc) {
-    SOKOL_ASSERT(desc->color_count < SG_MAX_COLOR_ATTACHMENTS);
+    SOKOL_ASSERT((desc->color_count >= 1) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS));
     cmn->shader_id = desc->shader;
     cmn->index_type = desc->index_type;
+    cmn->use_instanced_draw = false;
     for (int i = 0; i < SG_MAX_SHADERSTAGE_BUFFERS; i++) {
         cmn->vertex_layout_valid[i] = false;
     }
@@ -3059,7 +3489,7 @@ typedef _sg_gl_image_t _sg_image_t;
 typedef struct {
     GLint gl_loc;
     sg_uniform_type type;
-    uint8_t count;
+    uint16_t count;
     uint16_t offset;
 } _sg_gl_uniform_t;
 
@@ -3197,6 +3627,9 @@ typedef struct {
     bool ext_anisotropic;
     GLint max_anisotropy;
     GLint max_combined_texture_image_units;
+    #if _SOKOL_USE_WIN32_GL_LOADER
+    HINSTANCE opengl32_dll;
+    #endif
 } _sg_gl_backend_t;
 
 /*== D3D11 BACKEND DECLARATIONS ==============================================*/
@@ -3303,6 +3736,7 @@ typedef struct {
     void* user_data;
     bool in_pass;
     bool use_indexed_draw;
+    bool use_instanced_draw;
     int cur_width;
     int cur_height;
     int num_rtvs;
@@ -3316,14 +3750,6 @@ typedef struct {
     HINSTANCE d3dcompiler_dll;
     bool d3dcompiler_dll_load_failed;
     pD3DCompile D3DCompile_func;
-    /* the following arrays are used for unbinding resources, they will always contain zeroes */
-    ID3D11RenderTargetView* zero_rtvs[SG_MAX_COLOR_ATTACHMENTS];
-    ID3D11Buffer* zero_vbs[SG_MAX_SHADERSTAGE_BUFFERS];
-    UINT zero_vb_offsets[SG_MAX_SHADERSTAGE_BUFFERS];
-    UINT zero_vb_strides[SG_MAX_SHADERSTAGE_BUFFERS];
-    ID3D11Buffer* zero_cbs[SG_MAX_SHADERSTAGE_UBS];
-    ID3D11ShaderResourceView* zero_srvs[SG_MAX_SHADERSTAGE_IMAGES];
-    ID3D11SamplerState* zero_smps[SG_MAX_SHADERSTAGE_IMAGES];
     /* global subresourcedata array for texture updates */
     D3D11_SUBRESOURCE_DATA subres_data[SG_MAX_MIPMAPS * SG_MAX_TEXTUREARRAY_LAYERS];
 } _sg_d3d11_backend_t;
@@ -3639,6 +4065,10 @@ typedef enum {
     _SG_VALIDATE_BUFFERDESC_DATA_SIZE,
     _SG_VALIDATE_BUFFERDESC_NO_DATA,
 
+    /* image data (for image creation and updating) */
+    _SG_VALIDATE_IMAGEDATA_NODATA,
+    _SG_VALIDATE_IMAGEDATA_DATA_SIZE,
+
     /* image creation */
     _SG_VALIDATE_IMAGEDESC_CANARY,
     _SG_VALIDATE_IMAGEDESC_WIDTH,
@@ -3649,8 +4079,9 @@ typedef enum {
     _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT,
     _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE,
     _SG_VALIDATE_IMAGEDESC_RT_NO_DATA,
-    _SG_VALIDATE_IMAGEDESC_DATA,
-    _SG_VALIDATE_IMAGEDESC_NO_DATA,
+    _SG_VALIDATE_IMAGEDESC_INJECTED_NO_DATA,
+    _SG_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA,
+    _SG_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE,
 
     /* shader creation */
     _SG_VALIDATE_SHADERDESC_CANARY,
@@ -3664,6 +4095,8 @@ typedef enum {
     _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS,
     _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME,
     _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH,
+    _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT,
+    _SG_VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE,
     _SG_VALIDATE_SHADERDESC_IMG_NAME,
     _SG_VALIDATE_SHADERDESC_ATTR_NAMES,
     _SG_VALIDATE_SHADERDESC_ATTR_SEMANTICS,
@@ -3746,8 +4179,6 @@ typedef enum {
     /* sg_update_image validation */
     _SG_VALIDATE_UPDIMG_USAGE,
     _SG_VALIDATE_UPDIMG_NOTENOUGHDATA,
-    _SG_VALIDATE_UPDIMG_SIZE,
-    _SG_VALIDATE_UPDIMG_COMPRESSED,
     _SG_VALIDATE_UPDIMG_ONCE
 } _sg_validate_error_t;
 
@@ -3811,6 +4242,11 @@ _SOKOL_PRIVATE void _sg_strcpy(_sg_str_t* dst, const char* src) {
     }
 }
 
+_SOKOL_PRIVATE uint32_t _sg_align_u32(uint32_t val, uint32_t align) {
+    SOKOL_ASSERT((align > 0) && ((align & (align - 1)) == 0));
+    return (val + (align - 1)) & ~(align - 1);
+}
+
 /* return byte size of a vertex format */
 _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
     switch (fmt) {
@@ -3836,18 +4272,101 @@ _SOKOL_PRIVATE int _sg_vertexformat_bytesize(sg_vertex_format fmt) {
     }
 }
 
-/* return the byte size of a shader uniform */
-_SOKOL_PRIVATE int _sg_uniform_size(sg_uniform_type type, int count) {
-    switch (type) {
-        case SG_UNIFORMTYPE_INVALID:    return 0;
-        case SG_UNIFORMTYPE_FLOAT:      return 4 * count;
-        case SG_UNIFORMTYPE_FLOAT2:     return 8 * count;
-        case SG_UNIFORMTYPE_FLOAT3:     return 12 * count; /* FIXME: std140??? */
-        case SG_UNIFORMTYPE_FLOAT4:     return 16 * count;
-        case SG_UNIFORMTYPE_MAT4:       return 64 * count;
-        default:
-            SOKOL_UNREACHABLE;
-            return -1;
+_SOKOL_PRIVATE uint32_t _sg_uniform_alignment(sg_uniform_type type, int array_count, sg_uniform_layout ub_layout) {
+    if (ub_layout == SG_UNIFORMLAYOUT_NATIVE) {
+        return 1;
+    }
+    else {
+        SOKOL_ASSERT(array_count > 0);
+        if (array_count == 1) {
+            switch (type) {
+                case SG_UNIFORMTYPE_FLOAT:
+                case SG_UNIFORMTYPE_INT:
+                    return 4;
+                case SG_UNIFORMTYPE_FLOAT2:
+                case SG_UNIFORMTYPE_INT2:
+                    return 8;
+                case SG_UNIFORMTYPE_FLOAT3:
+                case SG_UNIFORMTYPE_FLOAT4:
+                case SG_UNIFORMTYPE_INT3:
+                case SG_UNIFORMTYPE_INT4:
+                    return 16;
+                case SG_UNIFORMTYPE_MAT4:
+                    return 16;
+                default:
+                    SOKOL_UNREACHABLE;
+                    return 1;
+            }
+        }
+        else {
+            return 16;
+        }
+    }
+}
+
+_SOKOL_PRIVATE uint32_t _sg_uniform_size(sg_uniform_type type, int array_count, sg_uniform_layout ub_layout) {
+    SOKOL_ASSERT(array_count > 0);
+    if (array_count == 1) {
+        switch (type) {
+            case SG_UNIFORMTYPE_FLOAT:
+            case SG_UNIFORMTYPE_INT:
+                return 4;
+            case SG_UNIFORMTYPE_FLOAT2:
+            case SG_UNIFORMTYPE_INT2:
+                return 8;
+            case SG_UNIFORMTYPE_FLOAT3:
+            case SG_UNIFORMTYPE_INT3:
+                return 12;
+            case SG_UNIFORMTYPE_FLOAT4:
+            case SG_UNIFORMTYPE_INT4:
+                return 16;
+            case SG_UNIFORMTYPE_MAT4:
+                return 64;
+            default:
+                SOKOL_UNREACHABLE;
+                return 0;
+        }
+    }
+    else {
+        if (ub_layout == SG_UNIFORMLAYOUT_NATIVE) {
+            switch (type) {
+                case SG_UNIFORMTYPE_FLOAT:
+                case SG_UNIFORMTYPE_INT:
+                    return 4 * (uint32_t)array_count;
+                case SG_UNIFORMTYPE_FLOAT2:
+                case SG_UNIFORMTYPE_INT2:
+                    return 8 * (uint32_t)array_count;
+                case SG_UNIFORMTYPE_FLOAT3:
+                case SG_UNIFORMTYPE_INT3:
+                    return 12 * (uint32_t)array_count;
+                case SG_UNIFORMTYPE_FLOAT4:
+                case SG_UNIFORMTYPE_INT4:
+                    return 16 * (uint32_t)array_count;
+                case SG_UNIFORMTYPE_MAT4:
+                    return 64 * (uint32_t)array_count;
+                default:
+                    SOKOL_UNREACHABLE;
+                    return 0;
+            }
+        }
+        else {
+            switch (type) {
+                case SG_UNIFORMTYPE_FLOAT:
+                case SG_UNIFORMTYPE_FLOAT2:
+                case SG_UNIFORMTYPE_FLOAT3:
+                case SG_UNIFORMTYPE_FLOAT4:
+                case SG_UNIFORMTYPE_INT:
+                case SG_UNIFORMTYPE_INT2:
+                case SG_UNIFORMTYPE_INT3:
+                case SG_UNIFORMTYPE_INT4:
+                    return 16 * (uint32_t)array_count;
+                case SG_UNIFORMTYPE_MAT4:
+                    return 64 * (uint32_t)array_count;
+                default:
+                    SOKOL_UNREACHABLE;
+                    return 0;
+            }
+        }
     }
 }
 
@@ -3961,7 +4480,21 @@ _SOKOL_PRIVATE int _sg_roundup(int val, int round_to) {
 }
 
 /* return row pitch for an image
+
     see ComputePitch in https://github.com/microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexUtil.cpp
+
+    For the special PVRTC pitch computation, see:
+    GL extension requirement (https://www.khronos.org/registry/OpenGL/extensions/IMG/IMG_texture_compression_pvrtc.txt)
+
+    Quote:
+
+    6) How is the imageSize argument calculated for the CompressedTexImage2D
+       and CompressedTexSubImage2D functions.
+
+       Resolution: For PVRTC 4BPP formats the imageSize is calculated as:
+          ( max(width, 8) * max(height, 8) * 4 + 7) / 8
+       For PVRTC 2BPP formats the imageSize is calculated as:
+          ( max(width, 16) * max(height, 8) * 2 + 7) / 8
 */
 _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) {
     int pitch;
@@ -3989,23 +4522,11 @@ _SOKOL_PRIVATE int _sg_row_pitch(sg_pixel_format fmt, int width, int row_align) 
             break;
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
-            {
-                const int block_size = 4*4;
-                const int bpp = 4;
-                int width_blocks = width / 4;
-                width_blocks = width_blocks < 2 ? 2 : width_blocks;
-                pitch = width_blocks * ((block_size * bpp) / 8);
-            }
+            pitch = (_sg_max(width, 8) * 4 + 7) / 8;
             break;
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-            {
-                const int block_size = 8*4;
-                const int bpp = 2;
-                int width_blocks = width / 4;
-                width_blocks = width_blocks < 2 ? 2 : width_blocks;
-                pitch = width_blocks * ((block_size * bpp) / 8);
-            }
+            pitch = (_sg_max(width, 16) * 2 + 7) / 8;
             break;
         default:
             pitch = width * _sg_pixelformat_bytesize(fmt);
@@ -4034,11 +4555,19 @@ _SOKOL_PRIVATE int _sg_num_rows(sg_pixel_format fmt, int height) {
         case SG_PIXELFORMAT_BC6H_RGBF:
         case SG_PIXELFORMAT_BC6H_RGBUF:
         case SG_PIXELFORMAT_BC7_RGBA:
+            num_rows = ((height + 3) / 4);
+            break;
         case SG_PIXELFORMAT_PVRTC_RGB_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_4BPP:
         case SG_PIXELFORMAT_PVRTC_RGB_2BPP:
         case SG_PIXELFORMAT_PVRTC_RGBA_2BPP:
-            num_rows = ((height + 3) / 4);
+            /* NOTE: this is most likely not correct because it ignores any
+                PVCRTC block size, but multiplied with _sg_row_pitch()
+                it gives the correct surface pitch.
+
+                See: https://www.khronos.org/registry/OpenGL/extensions/IMG/IMG_texture_compression_pvrtc.txt
+            */
+            num_rows = ((_sg_max(height, 8) + 7) / 8) * 8;
             break;
         default:
             num_rows = height;
@@ -4379,6 +4908,153 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
 
 /*== GL BACKEND ==============================================================*/
 #elif defined(_SOKOL_ANY_GL)
+
+/*=== OPTIONAL GL LOADER FOR WIN32 ===========================================*/
+#if defined(_SOKOL_USE_WIN32_GL_LOADER)
+
+// X Macro list of GL function names and signatures
+#define _SG_GL_FUNCS \
+    _SG_XMACRO(glBindVertexArray,                 void, (GLuint array)) \
+    _SG_XMACRO(glFramebufferTextureLayer,         void, (GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer)) \
+    _SG_XMACRO(glGenFramebuffers,                 void, (GLsizei n, GLuint * framebuffers)) \
+    _SG_XMACRO(glBindFramebuffer,                 void, (GLenum target, GLuint framebuffer)) \
+    _SG_XMACRO(glBindRenderbuffer,                void, (GLenum target, GLuint renderbuffer)) \
+    _SG_XMACRO(glGetStringi,                      const GLubyte *, (GLenum name, GLuint index)) \
+    _SG_XMACRO(glClearBufferfi,                   void, (GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)) \
+    _SG_XMACRO(glClearBufferfv,                   void, (GLenum buffer, GLint drawbuffer, const GLfloat * value)) \
+    _SG_XMACRO(glClearBufferuiv,                  void, (GLenum buffer, GLint drawbuffer, const GLuint * value)) \
+    _SG_XMACRO(glClearBufferiv,                   void, (GLenum buffer, GLint drawbuffer, const GLint * value)) \
+    _SG_XMACRO(glDeleteRenderbuffers,             void, (GLsizei n, const GLuint * renderbuffers)) \
+    _SG_XMACRO(glUniform1fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SG_XMACRO(glUniform2fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SG_XMACRO(glUniform3fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SG_XMACRO(glUniform4fv,                      void, (GLint location, GLsizei count, const GLfloat * value)) \
+    _SG_XMACRO(glUniform1iv,                      void, (GLint location, GLsizei count, const GLint * value)) \
+    _SG_XMACRO(glUniform2iv,                      void, (GLint location, GLsizei count, const GLint * value)) \
+    _SG_XMACRO(glUniform3iv,                      void, (GLint location, GLsizei count, const GLint * value)) \
+    _SG_XMACRO(glUniform4iv,                      void, (GLint location, GLsizei count, const GLint * value)) \
+    _SG_XMACRO(glUniformMatrix4fv,                void, (GLint location, GLsizei count, GLboolean transpose, const GLfloat * value)) \
+    _SG_XMACRO(glUseProgram,                      void, (GLuint program)) \
+    _SG_XMACRO(glShaderSource,                    void, (GLuint shader, GLsizei count, const GLchar *const* string, const GLint * length)) \
+    _SG_XMACRO(glLinkProgram,                     void, (GLuint program)) \
+    _SG_XMACRO(glGetUniformLocation,              GLint, (GLuint program, const GLchar * name)) \
+    _SG_XMACRO(glGetShaderiv,                     void, (GLuint shader, GLenum pname, GLint * params)) \
+    _SG_XMACRO(glGetProgramInfoLog,               void, (GLuint program, GLsizei bufSize, GLsizei * length, GLchar * infoLog)) \
+    _SG_XMACRO(glGetAttribLocation,               GLint, (GLuint program, const GLchar * name)) \
+    _SG_XMACRO(glDisableVertexAttribArray,        void, (GLuint index)) \
+    _SG_XMACRO(glDeleteShader,                    void, (GLuint shader)) \
+    _SG_XMACRO(glDeleteProgram,                   void, (GLuint program)) \
+    _SG_XMACRO(glCompileShader,                   void, (GLuint shader)) \
+    _SG_XMACRO(glStencilFuncSeparate,             void, (GLenum face, GLenum func, GLint ref, GLuint mask)) \
+    _SG_XMACRO(glStencilOpSeparate,               void, (GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass)) \
+    _SG_XMACRO(glRenderbufferStorageMultisample,  void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height)) \
+    _SG_XMACRO(glDrawBuffers,                     void, (GLsizei n, const GLenum * bufs)) \
+    _SG_XMACRO(glVertexAttribDivisor,             void, (GLuint index, GLuint divisor)) \
+    _SG_XMACRO(glBufferSubData,                   void, (GLenum target, GLintptr offset, GLsizeiptr size, const void * data)) \
+    _SG_XMACRO(glGenBuffers,                      void, (GLsizei n, GLuint * buffers)) \
+    _SG_XMACRO(glCheckFramebufferStatus,          GLenum, (GLenum target)) \
+    _SG_XMACRO(glFramebufferRenderbuffer,         void, (GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer)) \
+    _SG_XMACRO(glCompressedTexImage2D,            void, (GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void * data)) \
+    _SG_XMACRO(glCompressedTexImage3D,            void, (GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void * data)) \
+    _SG_XMACRO(glActiveTexture,                   void, (GLenum texture)) \
+    _SG_XMACRO(glTexSubImage3D,                   void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void * pixels)) \
+    _SG_XMACRO(glRenderbufferStorage,             void, (GLenum target, GLenum internalformat, GLsizei width, GLsizei height)) \
+    _SG_XMACRO(glGenTextures,                     void, (GLsizei n, GLuint * textures)) \
+    _SG_XMACRO(glPolygonOffset,                   void, (GLfloat factor, GLfloat units)) \
+    _SG_XMACRO(glDrawElements,                    void, (GLenum mode, GLsizei count, GLenum type, const void * indices)) \
+    _SG_XMACRO(glDeleteFramebuffers,              void, (GLsizei n, const GLuint * framebuffers)) \
+    _SG_XMACRO(glBlendEquationSeparate,           void, (GLenum modeRGB, GLenum modeAlpha)) \
+    _SG_XMACRO(glDeleteTextures,                  void, (GLsizei n, const GLuint * textures)) \
+    _SG_XMACRO(glGetProgramiv,                    void, (GLuint program, GLenum pname, GLint * params)) \
+    _SG_XMACRO(glBindTexture,                     void, (GLenum target, GLuint texture)) \
+    _SG_XMACRO(glTexImage3D,                      void, (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void * pixels)) \
+    _SG_XMACRO(glCreateShader,                    GLuint, (GLenum type)) \
+    _SG_XMACRO(glTexSubImage2D,                   void, (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void * pixels)) \
+    _SG_XMACRO(glClearDepth,                      void, (GLdouble depth)) \
+    _SG_XMACRO(glFramebufferTexture2D,            void, (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)) \
+    _SG_XMACRO(glCreateProgram,                   GLuint, (void)) \
+    _SG_XMACRO(glViewport,                        void, (GLint x, GLint y, GLsizei width, GLsizei height)) \
+    _SG_XMACRO(glDeleteBuffers,                   void, (GLsizei n, const GLuint * buffers)) \
+    _SG_XMACRO(glDrawArrays,                      void, (GLenum mode, GLint first, GLsizei count)) \
+    _SG_XMACRO(glDrawElementsInstanced,           void, (GLenum mode, GLsizei count, GLenum type, const void * indices, GLsizei instancecount)) \
+    _SG_XMACRO(glVertexAttribPointer,             void, (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void * pointer)) \
+    _SG_XMACRO(glUniform1i,                       void, (GLint location, GLint v0)) \
+    _SG_XMACRO(glDisable,                         void, (GLenum cap)) \
+    _SG_XMACRO(glColorMask,                       void, (GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)) \
+    _SG_XMACRO(glColorMaski,                      void, (GLuint buf, GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)) \
+    _SG_XMACRO(glBindBuffer,                      void, (GLenum target, GLuint buffer)) \
+    _SG_XMACRO(glDeleteVertexArrays,              void, (GLsizei n, const GLuint * arrays)) \
+    _SG_XMACRO(glDepthMask,                       void, (GLboolean flag)) \
+    _SG_XMACRO(glDrawArraysInstanced,             void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount)) \
+    _SG_XMACRO(glClearStencil,                    void, (GLint s)) \
+    _SG_XMACRO(glScissor,                         void, (GLint x, GLint y, GLsizei width, GLsizei height)) \
+    _SG_XMACRO(glGenRenderbuffers,                void, (GLsizei n, GLuint * renderbuffers)) \
+    _SG_XMACRO(glBufferData,                      void, (GLenum target, GLsizeiptr size, const void * data, GLenum usage)) \
+    _SG_XMACRO(glBlendFuncSeparate,               void, (GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha)) \
+    _SG_XMACRO(glTexParameteri,                   void, (GLenum target, GLenum pname, GLint param)) \
+    _SG_XMACRO(glGetIntegerv,                     void, (GLenum pname, GLint * data)) \
+    _SG_XMACRO(glEnable,                          void, (GLenum cap)) \
+    _SG_XMACRO(glBlitFramebuffer,                 void, (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)) \
+    _SG_XMACRO(glStencilMask,                     void, (GLuint mask)) \
+    _SG_XMACRO(glAttachShader,                    void, (GLuint program, GLuint shader)) \
+    _SG_XMACRO(glGetError,                        GLenum, (void)) \
+    _SG_XMACRO(glClearColor,                      void, (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
+    _SG_XMACRO(glBlendColor,                      void, (GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha)) \
+    _SG_XMACRO(glTexParameterf,                   void, (GLenum target, GLenum pname, GLfloat param)) \
+    _SG_XMACRO(glTexParameterfv,                  void, (GLenum target, GLenum pname, GLfloat* params)) \
+    _SG_XMACRO(glGetShaderInfoLog,                void, (GLuint shader, GLsizei bufSize, GLsizei * length, GLchar * infoLog)) \
+    _SG_XMACRO(glDepthFunc,                       void, (GLenum func)) \
+    _SG_XMACRO(glStencilOp ,                      void, (GLenum fail, GLenum zfail, GLenum zpass)) \
+    _SG_XMACRO(glStencilFunc,                     void, (GLenum func, GLint ref, GLuint mask)) \
+    _SG_XMACRO(glEnableVertexAttribArray,         void, (GLuint index)) \
+    _SG_XMACRO(glBlendFunc,                       void, (GLenum sfactor, GLenum dfactor)) \
+    _SG_XMACRO(glReadBuffer,                      void, (GLenum src)) \
+    _SG_XMACRO(glReadPixels,                      void, (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void * data)) \
+    _SG_XMACRO(glClear,                           void, (GLbitfield mask)) \
+    _SG_XMACRO(glTexImage2D,                      void, (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void * pixels)) \
+    _SG_XMACRO(glGenVertexArrays,                 void, (GLsizei n, GLuint * arrays)) \
+    _SG_XMACRO(glFrontFace,                       void, (GLenum mode)) \
+    _SG_XMACRO(glCullFace,                        void, (GLenum mode))
+
+// generate GL function pointer typedefs
+#define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
+_SG_GL_FUNCS
+#undef _SG_XMACRO
+
+// generate GL function pointers
+#define _SG_XMACRO(name, ret, args) static PFN_ ## name name;
+_SG_GL_FUNCS
+#undef _SG_XMACRO
+
+// helper function to lookup GL functions in GL DLL
+typedef PROC (WINAPI * _sg_wglGetProcAddress)(LPCSTR);
+_SOKOL_PRIVATE void* _sg_gl_getprocaddr(const char* name, _sg_wglGetProcAddress wgl_getprocaddress) {
+    void* proc_addr = (void*) wgl_getprocaddress(name);
+    if (0 == proc_addr) {
+        proc_addr = (void*) GetProcAddress(_sg.gl.opengl32_dll, name);
+    }
+    SOKOL_ASSERT(proc_addr);
+    return proc_addr;
+}
+
+// populate GL function pointers
+_SOKOL_PRIVATE  void _sg_gl_load_opengl(void) {
+    SOKOL_ASSERT(0 == _sg.gl.opengl32_dll);
+    _sg.gl.opengl32_dll = LoadLibraryA("opengl32.dll");
+    SOKOL_ASSERT(_sg.gl.opengl32_dll);
+    _sg_wglGetProcAddress wgl_getprocaddress = (_sg_wglGetProcAddress) GetProcAddress(_sg.gl.opengl32_dll, "wglGetProcAddress");
+    SOKOL_ASSERT(wgl_getprocaddress);
+    #define _SG_XMACRO(name, ret, args) name = (PFN_ ## name) _sg_gl_getprocaddr(#name, wgl_getprocaddress);
+    _SG_GL_FUNCS
+    #undef _SG_XMACRO
+}
+
+_SOKOL_PRIVATE void _sg_gl_unload_opengl(void) {
+    SOKOL_ASSERT(_sg.gl.opengl32_dll);
+    FreeLibrary(_sg.gl.opengl32_dll);
+    _sg.gl.opengl32_dll = 0;
+}
+#endif // _SOKOL_USE_WIN32_GL_LOADER
 
 /*-- type translation --------------------------------------------------------*/
 _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(sg_buffer_type t) {
@@ -5095,6 +5771,9 @@ _SOKOL_PRIVATE void _sg_gl_init_limits(void) {
         gl_int = SG_MAX_VERTEX_ATTRIBUTES;
     }
     _sg.limits.max_vertex_attrs = gl_int;
+    glGetIntegerv(GL_MAX_VERTEX_UNIFORM_VECTORS, &gl_int);
+    _SG_GL_CHECK_ERROR();
+    _sg.limits.gl_max_vertex_uniform_vectors = gl_int;
     #if !defined(SOKOL_GLES2)
     if (!_sg.gl.gles2) {
         glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &gl_int);
@@ -5335,7 +6014,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles2(void) {
     }
 
     _sg.features.origin_top_left = false;
-    #if defined(SOKOL_INSTANCING_ENABLED)
+    #if defined(_SOKOL_GL_INSTANCING_ENABLED)
         _sg.features.instancing = has_instancing;
     #endif
     _sg.features.multiple_render_targets = false;
@@ -5554,6 +6233,14 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_program(GLuint prog) {
     }
 }
 
+/* called from _sg_gl_destroy_pipeline() */
+_SOKOL_PRIVATE void _sg_gl_cache_invalidate_pipeline(_sg_pipeline_t* pip) {
+    if (pip == _sg.gl.cache.cur_pipeline) {
+        _sg.gl.cache.cur_pipeline = 0;
+        _sg.gl.cache.cur_pipeline_id.id = SG_INVALID_ID;
+    }
+}
+
 _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
     if (_sg.gl.cur_context) {
         _SG_GL_CHECK_ERROR();
@@ -5645,6 +6332,10 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     _sg.gl.gles2 = false;
     #endif
 
+    #if defined(_SOKOL_USE_WIN32_GL_LOADER)
+    _sg_gl_load_opengl();
+    #endif
+
     /* clear initial GL error state */
     #if defined(SOKOL_DEBUG)
         while (glGetError() != GL_NO_ERROR);
@@ -5666,6 +6357,9 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
 _SOKOL_PRIVATE void _sg_gl_discard_backend(void) {
     SOKOL_ASSERT(_sg.gl.valid);
     _sg.gl.valid = false;
+    #if defined(_SOKOL_USE_WIN32_GL_LOADER)
+    _sg_gl_unload_opengl();
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_gl_activate_context(_sg_context_t* ctx) {
@@ -5722,6 +6416,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const s
         }
         else {
             glGenBuffers(1, &gl_buf);
+            SOKOL_ASSERT(gl_buf);
             _sg_gl_cache_store_buffer_binding(gl_target);
             _sg_gl_cache_bind_buffer(gl_target, gl_buf);
             glBufferData(gl_target, buf->cmn.size, 0, gl_usage);
@@ -5892,7 +6587,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                             gl_img_target = _sg_gl_cubeface_target(face_index);
                         }
                         const GLvoid* data_ptr = desc->data.subimage[face_index][mip_index].ptr;
-                        const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                         int mip_width = img->cmn.width >> mip_index;
                         if (mip_width == 0) {
                             mip_width = 1;
@@ -5903,6 +6597,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                         }
                         if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
                             if (is_compressed) {
+                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                                 glCompressedTexImage2D(gl_img_target, mip_index, gl_internal_format,
                                     mip_width, mip_height, 0, data_size, data_ptr);
                             }
@@ -5922,6 +6617,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
                                 mip_depth = 1;
                             }
                             if (is_compressed) {
+                                const GLsizei data_size = (GLsizei) desc->data.subimage[face_index][mip_index].size;
                                 glCompressedTexImage3D(gl_img_target, mip_index, gl_internal_format,
                                     mip_width, mip_height, mip_depth, 0, data_size, data_ptr);
                             }
@@ -6038,17 +6734,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
             SOKOL_ASSERT(ub_desc->size > 0);
             _sg_gl_uniform_block_t* ub = &gl_stage->uniform_blocks[ub_index];
             SOKOL_ASSERT(ub->num_uniforms == 0);
-            int cur_uniform_offset = 0;
+            uint32_t cur_uniform_offset = 0;
             for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
                 const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
                 if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
                     break;
                 }
+                const uint32_t u_align = _sg_uniform_alignment(u_desc->type, u_desc->array_count, ub_desc->layout);
+                const uint32_t u_size = _sg_uniform_size(u_desc->type, u_desc->array_count, ub_desc->layout);
+                cur_uniform_offset = _sg_align_u32(cur_uniform_offset, u_align);
                 _sg_gl_uniform_t* u = &ub->uniforms[u_index];
                 u->type = u_desc->type;
-                u->count = (uint8_t) u_desc->array_count;
+                u->count = (uint16_t) u_desc->array_count;
                 u->offset = (uint16_t) cur_uniform_offset;
-                cur_uniform_offset += _sg_uniform_size(u->type, u->count);
+                cur_uniform_offset += u_size;
                 if (u_desc->name) {
                     u->gl_loc = glGetUniformLocation(gl_prog, u_desc->name);
                 }
@@ -6150,6 +6849,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
             }
             else {
                 gl_attr->divisor = (int8_t) step_rate;
+                pip->cmn.use_instanced_draw = true;
             }
             SOKOL_ASSERT(l_desc->stride > 0);
             gl_attr->stride = (uint8_t) l_desc->stride;
@@ -6169,8 +6869,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pipeline(_sg_pipeline_t* pip, _sg
 
 _SOKOL_PRIVATE void _sg_gl_destroy_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
-    _SOKOL_UNUSED(pip);
-    /* empty */
+    _sg_gl_cache_invalidate_pipeline(pip);
 }
 
 /*
@@ -6336,6 +7035,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_pass(_sg_pass_t* pass, _sg_image_
 
 _SOKOL_PRIVATE void _sg_gl_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
+    SOKOL_ASSERT(pass != _sg.gl.cur_pass);
     _SG_GL_CHECK_ERROR();
     if (0 != pass->gl.fb) {
         glDeleteFramebuffers(1, &pass->gl.fb);
@@ -6836,7 +7536,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_bindings(
                 glVertexAttribPointer(attr_index, attr->size, attr->type,
                     attr->normalized, attr->stride,
                     (const GLvoid*)(GLintptr)vb_offset);
-                #ifdef SOKOL_INSTANCING_ENABLED
+                #if defined(_SOKOL_GL_INSTANCING_ENABLED)
                     if (_sg.features.instancing) {
                         glVertexAttribDivisor(attr_index, (GLuint)attr->divisor);
                     }
@@ -6878,24 +7578,37 @@ _SOKOL_PRIVATE void _sg_gl_apply_uniforms(sg_shader_stage stage_index, int ub_in
         if (u->gl_loc == -1) {
             continue;
         }
-        GLfloat* ptr = (GLfloat*) (((uint8_t*)data->ptr) + u->offset);
+        GLfloat* fptr = (GLfloat*) (((uint8_t*)data->ptr) + u->offset);
+        GLint* iptr = (GLint*) (((uint8_t*)data->ptr) + u->offset);
         switch (u->type) {
             case SG_UNIFORMTYPE_INVALID:
                 break;
             case SG_UNIFORMTYPE_FLOAT:
-                glUniform1fv(u->gl_loc, u->count, ptr);
+                glUniform1fv(u->gl_loc, u->count, fptr);
                 break;
             case SG_UNIFORMTYPE_FLOAT2:
-                glUniform2fv(u->gl_loc, u->count, ptr);
+                glUniform2fv(u->gl_loc, u->count, fptr);
                 break;
             case SG_UNIFORMTYPE_FLOAT3:
-                glUniform3fv(u->gl_loc, u->count, ptr);
+                glUniform3fv(u->gl_loc, u->count, fptr);
                 break;
             case SG_UNIFORMTYPE_FLOAT4:
-                glUniform4fv(u->gl_loc, u->count, ptr);
+                glUniform4fv(u->gl_loc, u->count, fptr);
+                break;
+            case SG_UNIFORMTYPE_INT:
+                glUniform1iv(u->gl_loc, u->count, iptr);
+                break;
+            case SG_UNIFORMTYPE_INT2:
+                glUniform2iv(u->gl_loc, u->count, iptr);
+                break;
+            case SG_UNIFORMTYPE_INT3:
+                glUniform3iv(u->gl_loc, u->count, iptr);
+                break;
+            case SG_UNIFORMTYPE_INT4:
+                glUniform4iv(u->gl_loc, u->count, iptr);
                 break;
             case SG_UNIFORMTYPE_MAT4:
-                glUniformMatrix4fv(u->gl_loc, u->count, GL_FALSE, ptr);
+                glUniformMatrix4fv(u->gl_loc, u->count, GL_FALSE, fptr);
                 break;
             default:
                 SOKOL_UNREACHABLE;
@@ -6905,6 +7618,7 @@ _SOKOL_PRIVATE void _sg_gl_apply_uniforms(sg_shader_stage stage_index, int ub_in
 }
 
 _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_instances) {
+    SOKOL_ASSERT(_sg.gl.cache.cur_pipeline);
     const GLenum i_type = _sg.gl.cache.cur_index_type;
     const GLenum p_type = _sg.gl.cache.cur_primitive_type;
     if (0 != i_type) {
@@ -6912,24 +7626,24 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
         const int i_size = (i_type == GL_UNSIGNED_SHORT) ? 2 : 4;
         const int ib_offset = _sg.gl.cache.cur_ib_offset;
         const GLvoid* indices = (const GLvoid*)(GLintptr)(base_element*i_size+ib_offset);
-        if (num_instances == 1) {
-            glDrawElements(p_type, num_elements, i_type, indices);
-        }
-        else {
+        if (_sg.gl.cache.cur_pipeline->cmn.use_instanced_draw) {
             if (_sg.features.instancing) {
                 glDrawElementsInstanced(p_type, num_elements, i_type, indices, num_instances);
             }
         }
+        else {
+            glDrawElements(p_type, num_elements, i_type, indices);
+        }
     }
     else {
         /* non-indexed rendering */
-        if (num_instances == 1) {
-            glDrawArrays(p_type, base_element, num_elements);
-        }
-        else {
+        if (_sg.gl.cache.cur_pipeline->cmn.use_instanced_draw) {
             if (_sg.features.instancing) {
                 glDrawArraysInstanced(p_type, base_element, num_elements, num_instances);
             }
+        }
+        else {
+            glDrawArrays(p_type, base_element, num_elements);
         }
     }
 }
@@ -7411,6 +8125,14 @@ static inline void _sg_d3d11_Unmap(ID3D11DeviceContext* self, ID3D11Resource* pR
     #endif
 }
 
+static inline void _sg_d3d11_ClearState(ID3D11DeviceContext* self) {
+    #if defined(__cplusplus)
+        self->ClearState();
+    #else
+        self->lpVtbl->ClearState(self);
+    #endif
+}
+
 /*-- enum translation functions ----------------------------------------------*/
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_usage(sg_usage usg) {
     switch (usg) {
@@ -7749,21 +8471,7 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_backend(void) {
 
 _SOKOL_PRIVATE void _sg_d3d11_clear_state(void) {
     /* clear all the device context state, so that resource refs don't keep stuck in the d3d device context */
-    _sg_d3d11_OMSetRenderTargets(_sg.d3d11.ctx, SG_MAX_COLOR_ATTACHMENTS, _sg.d3d11.zero_rtvs, NULL);
-    _sg_d3d11_RSSetState(_sg.d3d11.ctx, NULL);
-    _sg_d3d11_OMSetDepthStencilState(_sg.d3d11.ctx, NULL, 0);
-    _sg_d3d11_OMSetBlendState(_sg.d3d11.ctx, NULL, NULL, 0xFFFFFFFF);
-    _sg_d3d11_IASetVertexBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_BUFFERS, _sg.d3d11.zero_vbs, _sg.d3d11.zero_vb_strides, _sg.d3d11.zero_vb_offsets);
-    _sg_d3d11_IASetIndexBuffer(_sg.d3d11.ctx, NULL, DXGI_FORMAT_UNKNOWN, 0);
-    _sg_d3d11_IASetInputLayout(_sg.d3d11.ctx, NULL);
-    _sg_d3d11_VSSetShader(_sg.d3d11.ctx, NULL, NULL, 0);
-    _sg_d3d11_PSSetShader(_sg.d3d11.ctx, NULL, NULL, 0);
-    _sg_d3d11_VSSetConstantBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, _sg.d3d11.zero_cbs);
-    _sg_d3d11_PSSetConstantBuffers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_UBS, _sg.d3d11.zero_cbs);
-    _sg_d3d11_VSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_srvs);
-    _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_srvs);
-    _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_smps);
-    _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, SG_MAX_SHADERSTAGE_IMAGES, _sg.d3d11.zero_smps);
+    _sg_d3d11_ClearState(_sg.d3d11.ctx);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_reset_state_cache(void) {
@@ -7813,8 +8521,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, cons
             init_data_ptr = &init_data;
         }
         HRESULT hr = _sg_d3d11_CreateBuffer(_sg.d3d11.dev, &d3d11_desc, init_data_ptr, &buf->d3d11.buf);
-        _SOKOL_UNUSED(hr);
-        SOKOL_ASSERT(SUCCEEDED(hr) && buf->d3d11.buf);
+        if (!(SUCCEEDED(hr) && buf->d3d11.buf)) {
+            SOKOL_LOG("failed to create D3D11 buffer\n");
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -7860,7 +8570,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
     SOKOL_ASSERT(!img->d3d11.tex2d && !img->d3d11.tex3d && !img->d3d11.texds && !img->d3d11.texmsaa);
     SOKOL_ASSERT(!img->d3d11.srv && !img->d3d11.smp);
     HRESULT hr;
-    _SOKOL_UNUSED(hr);
 
     _sg_image_common_init(&img->cmn, desc);
     const bool injected = (0 != desc->d3d11_texture) || (0 != desc->d3d11_shader_resource_view);
@@ -7887,7 +8596,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         d3d11_desc.SampleDesc.Count = (UINT)img->cmn.sample_count;
         d3d11_desc.SampleDesc.Quality = (UINT) (msaa ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0);
         hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_desc, NULL, &img->d3d11.texds);
-        SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.texds);
+        if (!(SUCCEEDED(hr) && img->d3d11.texds)) {
+            SOKOL_LOG("failed to create D3D11 texture 2D\n");
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
     else {
         /* create (or inject) color texture and shader-resource-view */
@@ -7957,7 +8669,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 d3d11_tex_desc.MiscFlags = (img->cmn.type == SG_IMAGETYPE_CUBE) ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
 
                 hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11.tex2d);
-                SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.tex2d);
+                if (!(SUCCEEDED(hr) && img->d3d11.tex2d)) {
+                    SOKOL_LOG("failed to create D3D11 texture 2D\n");
+                    return SG_RESOURCESTATE_FAILED;
+                }
             }
 
             /* ...and similar, if not injected, create shader-resource-view */
@@ -7983,7 +8698,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                         SOKOL_UNREACHABLE; break;
                 }
                 hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex2d, &d3d11_srv_desc, &img->d3d11.srv);
-                SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.srv);
+                if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
+                    SOKOL_LOG("failed to create D3D11 resource view\n");
+                    return SG_RESOURCESTATE_FAILED;
+                }
             }
         }
         else {
@@ -8030,7 +8748,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                     return SG_RESOURCESTATE_FAILED;
                 }
                 hr = _sg_d3d11_CreateTexture3D(_sg.d3d11.dev, &d3d11_tex_desc, init_data, &img->d3d11.tex3d);
-                SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.tex3d);
+                if (!(SUCCEEDED(hr) && img->d3d11.tex3d)) {
+                    SOKOL_LOG("failed to create D3D11 texture 3D\n");
+                    return SG_RESOURCESTATE_FAILED;
+                }
             }
 
             if (0 == img->d3d11.srv) {
@@ -8040,7 +8761,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
                 d3d11_srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
                 d3d11_srv_desc.Texture3D.MipLevels = (UINT)img->cmn.num_mipmaps;
                 hr = _sg_d3d11_CreateShaderResourceView(_sg.d3d11.dev, (ID3D11Resource*)img->d3d11.tex3d, &d3d11_srv_desc, &img->d3d11.srv);
-                SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.srv);
+                if (!(SUCCEEDED(hr) && img->d3d11.srv)) {
+                    SOKOL_LOG("failed to create D3D11 resource view\n");
+                    return SG_RESOURCESTATE_FAILED;
+                }
             }
         }
 
@@ -8059,7 +8783,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
             d3d11_tex_desc.SampleDesc.Count = (UINT)img->cmn.sample_count;
             d3d11_tex_desc.SampleDesc.Quality = (UINT)D3D11_STANDARD_MULTISAMPLE_PATTERN;
             hr = _sg_d3d11_CreateTexture2D(_sg.d3d11.dev, &d3d11_tex_desc, NULL, &img->d3d11.texmsaa);
-            SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.texmsaa);
+            if (!(SUCCEEDED(hr) && img->d3d11.texmsaa)) {
+                SOKOL_LOG("failed to create D3D11 texture 2D\n");
+                return SG_RESOURCESTATE_FAILED;
+            }
         }
 
         /* sampler state object, note D3D11 implements an internal shared-pool for sampler objects */
@@ -8088,7 +8815,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
         d3d11_smp_desc.MinLOD = desc->min_lod;
         d3d11_smp_desc.MaxLOD = desc->max_lod;
         hr = _sg_d3d11_CreateSamplerState(_sg.d3d11.dev, &d3d11_smp_desc, &img->d3d11.smp);
-        SOKOL_ASSERT(SUCCEEDED(hr) && img->d3d11.smp);
+        if (!(SUCCEEDED(hr) && img->d3d11.smp)) {
+            SOKOL_LOG("failed to create D3D11 sampler state\n");
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
     return SG_RESOURCESTATE_VALID;
 }
@@ -8180,7 +8910,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
     SOKOL_ASSERT(shd && desc);
     SOKOL_ASSERT(!shd->d3d11.vs && !shd->d3d11.fs && !shd->d3d11.vs_blob);
     HRESULT hr;
-    _SOKOL_UNUSED(hr);
 
     _sg_shader_common_init(&shd->cmn, desc);
 
@@ -8205,7 +8934,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_shader(_sg_shader_t* shd, cons
             cb_desc.Usage = D3D11_USAGE_DEFAULT;
             cb_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
             hr = _sg_d3d11_CreateBuffer(_sg.d3d11.dev, &cb_desc, NULL, &d3d11_stage->cbufs[ub_index]);
-            SOKOL_ASSERT(SUCCEEDED(hr) && d3d11_stage->cbufs[ub_index]);
+            if (!(SUCCEEDED(hr) && d3d11_stage->cbufs[ub_index])) {
+                SOKOL_LOG("failed to create D3D11 buffer\n");
+                return SG_RESOURCESTATE_FAILED;
+            }
         }
     }
 
@@ -8293,7 +9025,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
 
     /* create input layout object */
     HRESULT hr;
-    _SOKOL_UNUSED(hr);
     D3D11_INPUT_ELEMENT_DESC d3d11_comps[SG_MAX_VERTEX_ATTRIBUTES];
     memset(d3d11_comps, 0, sizeof(d3d11_comps));
     int attr_index = 0;
@@ -8315,6 +9046,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         d3d11_comp->InputSlotClass = _sg_d3d11_input_classification(step_func);
         if (SG_VERTEXSTEP_PER_INSTANCE == step_func) {
             d3d11_comp->InstanceDataStepRate = (UINT)step_rate;
+            pip->cmn.use_instanced_draw = true;
         }
         pip->cmn.vertex_layout_valid[a_desc->buffer_index] = true;
     }
@@ -8334,7 +9066,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         shd->d3d11.vs_blob,         /* pShaderByteCodeWithInputSignature */
         shd->d3d11.vs_blob_length,  /* BytecodeLength */
         &pip->d3d11.il);
-    SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11.il);
+    if (!(SUCCEEDED(hr) && pip->d3d11.il)) {
+        SOKOL_LOG("failed to create D3D11 input layout\n");
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     /* create rasterizer state */
     D3D11_RASTERIZER_DESC rs_desc;
@@ -8350,7 +9085,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     rs_desc.MultisampleEnable = desc->sample_count > 1;
     rs_desc.AntialiasedLineEnable = FALSE;
     hr = _sg_d3d11_CreateRasterizerState(_sg.d3d11.dev, &rs_desc, &pip->d3d11.rs);
-    SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11.rs);
+    if (!(SUCCEEDED(hr) && pip->d3d11.rs)) {
+        SOKOL_LOG("failed to create D3D11 rasterizer state\n");
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     /* create depth-stencil state */
     D3D11_DEPTH_STENCIL_DESC dss_desc;
@@ -8372,7 +9110,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     dss_desc.BackFace.StencilPassOp = _sg_d3d11_stencil_op(sb->pass_op);
     dss_desc.BackFace.StencilFunc = _sg_d3d11_compare_func(sb->compare);
     hr = _sg_d3d11_CreateDepthStencilState(_sg.d3d11.dev, &dss_desc, &pip->d3d11.dss);
-    SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11.dss);
+    if (!(SUCCEEDED(hr) && pip->d3d11.dss)) {
+        SOKOL_LOG("failed to create D3D11 depth stencil state\n");
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     /* create blend state */
     D3D11_BLEND_DESC bs_desc;
@@ -8403,13 +9144,20 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
         }
     }
     hr = _sg_d3d11_CreateBlendState(_sg.d3d11.dev, &bs_desc, &pip->d3d11.bs);
-    SOKOL_ASSERT(SUCCEEDED(hr) && pip->d3d11.bs);
+    if (!(SUCCEEDED(hr) && pip->d3d11.bs)) {
+        SOKOL_LOG("failed to create D3D11 blend state\n");
+        return SG_RESOURCESTATE_FAILED;
+    }
 
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_destroy_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
+    if (pip == _sg.d3d11.cur_pipeline) {
+        _sg.d3d11.cur_pipeline = 0;
+        _sg.d3d11.cur_pipeline_id.id = SG_INVALID_ID;
+    }
     if (pip->d3d11.il) {
         _sg_d3d11_Release(pip->d3d11.il);
     }
@@ -8477,8 +9225,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
         }
         SOKOL_ASSERT(d3d11_res);
         HRESULT hr = _sg_d3d11_CreateRenderTargetView(_sg.d3d11.dev, d3d11_res, &d3d11_rtv_desc, &pass->d3d11.color_atts[i].rtv);
-        _SOKOL_UNUSED(hr);
-        SOKOL_ASSERT(SUCCEEDED(hr) && pass->d3d11.color_atts[i].rtv);
+        if (!(SUCCEEDED(hr) && pass->d3d11.color_atts[i].rtv)) {
+            SOKOL_LOG("failed to create D3D11 render target view\n");
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
 
     /* optional depth-stencil image */
@@ -8508,14 +9258,17 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pass(_sg_pass_t* pass, _sg_ima
         ID3D11Resource* d3d11_res = (ID3D11Resource*) att_img->d3d11.texds;
         SOKOL_ASSERT(d3d11_res);
         HRESULT hr = _sg_d3d11_CreateDepthStencilView(_sg.d3d11.dev, d3d11_res, &d3d11_dsv_desc, &pass->d3d11.ds_att.dsv);
-        _SOKOL_UNUSED(hr);
-        SOKOL_ASSERT(SUCCEEDED(hr) && pass->d3d11.ds_att.dsv);
+        if (!(SUCCEEDED(hr) && pass->d3d11.ds_att.dsv)) {
+            SOKOL_LOG("failed to create D3D11 depth stencil view\n");
+            return SG_RESOURCESTATE_FAILED;
+        }
     }
     return SG_RESOURCESTATE_VALID;
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_destroy_pass(_sg_pass_t* pass) {
     SOKOL_ASSERT(pass);
+    SOKOL_ASSERT(pass != _sg.d3d11.cur_pass);
     for (int i = 0; i < SG_MAX_COLOR_ATTACHMENTS; i++) {
         if (pass->d3d11.color_atts[i].rtv) {
             _sg_d3d11_Release(pass->d3d11.color_atts[i].rtv);
@@ -8690,6 +9443,7 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_pipeline(_sg_pipeline_t* pip) {
     _sg.d3d11.cur_pipeline = pip;
     _sg.d3d11.cur_pipeline_id.id = pip->slot.id;
     _sg.d3d11.use_indexed_draw = (pip->d3d11.index_format != DXGI_FORMAT_UNKNOWN);
+    _sg.d3d11.use_instanced_draw = pip->cmn.use_instanced_draw;
 
     _sg_d3d11_RSSetState(_sg.d3d11.ctx, pip->d3d11.rs);
     _sg_d3d11_OMSetDepthStencilState(_sg.d3d11.ctx, pip->d3d11.dss, pip->d3d11.stencil_ref);
@@ -8774,19 +9528,19 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(sg_shader_stage stage_index, int ub
 _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(_sg.d3d11.in_pass);
     if (_sg.d3d11.use_indexed_draw) {
-        if (1 == num_instances) {
-            _sg_d3d11_DrawIndexed(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element, 0);
+        if (_sg.d3d11.use_instanced_draw) {
+            _sg_d3d11_DrawIndexedInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0, 0);
         }
         else {
-            _sg_d3d11_DrawIndexedInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0, 0);
+            _sg_d3d11_DrawIndexed(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element, 0);
         }
     }
     else {
-        if (1 == num_instances) {
-            _sg_d3d11_Draw(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element);
+        if (_sg.d3d11.use_instanced_draw) {
+            _sg_d3d11_DrawInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0);
         }
         else {
-            _sg_d3d11_DrawInstanced(_sg.d3d11.ctx, (UINT)num_elements, (UINT)num_instances, (UINT)base_element, 0);
+            _sg_d3d11_Draw(_sg.d3d11.ctx, (UINT)num_elements, (UINT)base_element);
         }
     }
 }
@@ -8801,10 +9555,12 @@ _SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const sg_range* d
     SOKOL_ASSERT(buf->d3d11.buf);
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     HRESULT hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
-    _SOKOL_UNUSED(hr);
-    SOKOL_ASSERT(SUCCEEDED(hr));
-    memcpy(d3d11_msr.pData, data->ptr, data->size);
-    _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
+    if (SUCCEEDED(hr)) {
+        memcpy(d3d11_msr.pData, data->ptr, data->size);
+        _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
+    } else {
+        SOKOL_LOG("failed to map buffer while updating!\n");
+    }
 }
 
 _SOKOL_PRIVATE int _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
@@ -8814,12 +9570,14 @@ _SOKOL_PRIVATE int _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* da
     D3D11_MAP map_type = new_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     HRESULT hr = _sg_d3d11_Map(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0, map_type, 0, &d3d11_msr);
-    _SOKOL_UNUSED(hr);
-    SOKOL_ASSERT(SUCCEEDED(hr));
-    uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData + buf->cmn.append_pos;
-    memcpy(dst_ptr, data->ptr, data->size);
-    _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
-    /* NOTE: this is a requirement from WebGPU, but we want identical behaviour across all backend */
+    if (SUCCEEDED(hr)) {
+        uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData + buf->cmn.append_pos;
+        memcpy(dst_ptr, data->ptr, data->size);
+        _sg_d3d11_Unmap(_sg.d3d11.ctx, (ID3D11Resource*)buf->d3d11.buf, 0);
+    } else {
+        SOKOL_LOG("failed to map buffer while appending!\n");
+    }
+    /* NOTE: this alignment is a requirement from WebGPU, but we want identical behaviour across all backend */
     return _sg_roundup((int)data->size, 4);
 }
 
@@ -8839,7 +9597,6 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
     const int num_slices = (img->cmn.type == SG_IMAGETYPE_ARRAY) ? img->cmn.num_slices:1;
     UINT subres_index = 0;
     HRESULT hr;
-    _SOKOL_UNUSED(hr);
     D3D11_MAPPED_SUBRESOURCE d3d11_msr;
     for (int face_index = 0; face_index < num_faces; face_index++) {
         for (int slice_index = 0; slice_index < num_slices; slice_index++) {
@@ -8853,22 +9610,25 @@ _SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data
                 const size_t slice_offset = slice_size * (size_t)slice_index;
                 const uint8_t* slice_ptr = ((const uint8_t*)subimg_data->ptr) + slice_offset;
                 hr = _sg_d3d11_Map(_sg.d3d11.ctx, d3d11_res, subres_index, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
-                SOKOL_ASSERT(SUCCEEDED(hr));
-                /* FIXME: need to handle difference in depth-pitch for 3D textures as well! */
-                if (src_pitch == (int)d3d11_msr.RowPitch) {
-                    memcpy(d3d11_msr.pData, slice_ptr, slice_size);
-                }
-                else {
-                    SOKOL_ASSERT(src_pitch < (int)d3d11_msr.RowPitch);
-                    const uint8_t* src_ptr = slice_ptr;
-                    uint8_t* dst_ptr = (uint8_t*) d3d11_msr.pData;
-                    for (int row_index = 0; row_index < mip_height; row_index++) {
-                        memcpy(dst_ptr, src_ptr, (size_t)src_pitch);
-                        src_ptr += src_pitch;
-                        dst_ptr += d3d11_msr.RowPitch;
+                if (SUCCEEDED(hr)) {
+                    /* FIXME: need to handle difference in depth-pitch for 3D textures as well! */
+                    if (src_pitch == (int)d3d11_msr.RowPitch) {
+                        memcpy(d3d11_msr.pData, slice_ptr, slice_size);
                     }
+                    else {
+                        SOKOL_ASSERT(src_pitch < (int)d3d11_msr.RowPitch);
+                        const uint8_t* src_ptr = slice_ptr;
+                        uint8_t* dst_ptr = (uint8_t*) d3d11_msr.pData;
+                        for (int row_index = 0; row_index < mip_height; row_index++) {
+                            memcpy(dst_ptr, src_ptr, (size_t)src_pitch);
+                            src_ptr += src_pitch;
+                            dst_ptr += d3d11_msr.RowPitch;
+                        }
+                    }
+                    _sg_d3d11_Unmap(_sg.d3d11.ctx, d3d11_res, subres_index);
+                } else {
+                    SOKOL_LOG("failed to map texture!\n");
                 }
-                _sg_d3d11_Unmap(_sg.d3d11.ctx, d3d11_res, subres_index);
             }
         }
     }
@@ -8900,13 +9660,17 @@ _SOKOL_PRIVATE MTLLoadAction _sg_mtl_load_action(sg_action a) {
 _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(sg_usage usg) {
     switch (usg) {
         case SG_USAGE_IMMUTABLE:
+            #if defined(_SG_TARGET_MACOS)
+            return MTLResourceStorageModeManaged;
+            #else
             return MTLResourceStorageModeShared;
+            #endif
         case SG_USAGE_DYNAMIC:
         case SG_USAGE_STREAM:
             #if defined(_SG_TARGET_MACOS)
-            return MTLCPUCacheModeWriteCombined|MTLResourceStorageModeManaged;
+            return MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeManaged;
             #else
-            return MTLCPUCacheModeWriteCombined;
+            return MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared;
             #endif
         default:
             SOKOL_UNREACHABLE;
@@ -9552,14 +10316,10 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg.mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     _sg.mtl.device = (__bridge id<MTLDevice>) desc->context.metal.device;
     _sg.mtl.cmd_queue = [_sg.mtl.device newCommandQueue];
-    MTLResourceOptions res_opts = MTLResourceCPUCacheModeWriteCombined;
-    #if defined(_SG_TARGET_MACOS)
-    res_opts |= MTLResourceStorageModeManaged;
-    #endif
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         _sg.mtl.uniform_buffers[i] = [_sg.mtl.device
             newBufferWithLength:(NSUInteger)_sg.mtl.ub_size
-            options:res_opts
+            options:MTLResourceCPUCacheModeWriteCombined|MTLResourceStorageModeShared
         ];
     }
     _sg_mtl_init_caps();
@@ -9676,22 +10436,31 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
             const uint8_t* data_ptr = (const uint8_t*)data->subimage[face_index][mip_index].ptr;
             const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
             const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-            /* special case PVRTC formats: bytePerRow must be 0 */
+            /* special case PVRTC formats: bytePerRow and bytesPerImage must be 0 */
             int bytes_per_row = 0;
-            int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
+            int bytes_per_slice = 0;
             if (!_sg_mtl_is_pvrtc(img->cmn.pixel_format)) {
                 bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+                bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
             }
+            /* bytesPerImage special case: https://developer.apple.com/documentation/metal/mtltexture/1515679-replaceregion
+
+                "Supply a nonzero value only when you copy data to a MTLTextureType3D type texture"
+            */
             MTLRegion region;
+            int bytes_per_image;
             if (img->cmn.type == SG_IMAGETYPE_3D) {
                 const int mip_depth = _sg_max(img->cmn.num_slices >> mip_index, 1);
                 region = MTLRegionMake3D(0, 0, 0, (NSUInteger)mip_width, (NSUInteger)mip_height, (NSUInteger)mip_depth);
+                bytes_per_image = bytes_per_slice;
                 /* FIXME: apparently the minimal bytes_per_image size for 3D texture
                  is 4 KByte... somehow need to handle this */
             }
             else {
                 region = MTLRegionMake2D(0, 0, (NSUInteger)mip_width, (NSUInteger)mip_height);
+                bytes_per_image = 0;
             }
+
             for (int slice_index = 0; slice_index < num_slices; slice_index++) {
                 const int mtl_slice_index = (img->cmn.type == SG_IMAGETYPE_CUBE) ? face_index : slice_index;
                 const int slice_offset = slice_index * bytes_per_slice;
@@ -9701,7 +10470,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
                     slice:(NSUInteger)mtl_slice_index
                     withBytes:data_ptr + slice_offset
                     bytesPerRow:(NSUInteger)bytes_per_row
-                    bytesPerImage:(NSUInteger)bytes_per_slice];
+                    bytesPerImage:(NSUInteger)bytes_per_image];
             }
         }
     }
@@ -9746,18 +10515,18 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
         mtl_desc.arrayLength = 1;
     }
     mtl_desc.usage = MTLTextureUsageShaderRead;
+    MTLResourceOptions res_options = 0;
     if (img->cmn.usage != SG_USAGE_IMMUTABLE) {
-        mtl_desc.cpuCacheMode = MTLCPUCacheModeWriteCombined;
+        res_options |= MTLResourceCPUCacheModeWriteCombined;
     }
     #if defined(_SG_TARGET_MACOS)
         /* macOS: use managed textures */
-        mtl_desc.resourceOptions = MTLResourceStorageModeManaged;
-        mtl_desc.storageMode = MTLStorageModeManaged;
+        res_options |= MTLResourceStorageModeManaged;
     #else
         /* iOS: use CPU/GPU shared memory */
-        mtl_desc.resourceOptions = MTLResourceStorageModeShared;
-        mtl_desc.storageMode = MTLStorageModeShared;
+        res_options |= MTLResourceStorageModeShared;
     #endif
+    mtl_desc.resourceOptions = res_options;
     return true;
 }
 
@@ -9765,11 +10534,8 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc_common(MTLTextureDescriptor* mtl_desc, 
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     SOKOL_ASSERT(img->cmn.render_target);
     _SOKOL_UNUSED(img);
-    /* reset the cpuCacheMode to 'default' */
-    mtl_desc.cpuCacheMode = MTLCPUCacheModeDefaultCache;
     /* render targets are only visible to the GPU */
     mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
-    mtl_desc.storageMode = MTLStorageModePrivate;
     /* non-MSAA render targets are shader-readable */
     mtl_desc.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
 }
@@ -9777,11 +10543,8 @@ _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt(MTLTextureDescriptor* mtl_desc, _sg_
 /* initialize MTLTextureDescritor with MSAA attributes */
 _SOKOL_PRIVATE void _sg_mtl_init_texdesc_rt_msaa(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
     SOKOL_ASSERT(img->cmn.sample_count > 1);
-    /* reset the cpuCacheMode to 'default' */
-    mtl_desc.cpuCacheMode = MTLCPUCacheModeDefaultCache;
     /* render targets are only visible to the GPU */
     mtl_desc.resourceOptions = MTLResourceStorageModePrivate;
-    mtl_desc.storageMode = MTLStorageModePrivate;
     /* MSAA render targets are not shader-readable (instead they are resolved) */
     mtl_desc.usage = MTLTextureUsageRenderTarget;
     mtl_desc.textureType = MTLTextureType2DMultisample;
@@ -10003,6 +10766,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, _s
             vtx_desc.layouts[mtl_vb_slot].stride = (NSUInteger)l_desc->stride;
             vtx_desc.layouts[mtl_vb_slot].stepFunction = _sg_mtl_step_function(l_desc->step_func);
             vtx_desc.layouts[mtl_vb_slot].stepRate = (NSUInteger)l_desc->step_rate;
+            if (SG_VERTEXSTEP_PER_INSTANCE == l_desc->step_func) {
+                // NOTE: not actually used in _sg_mtl_draw()
+                pip->cmn.use_instanced_draw = true;
+            }
         }
     }
 
@@ -10149,6 +10916,11 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
         /* block until the oldest frame in flight has finished */
         dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
         _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
+        [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
+            // NOTE: this code is called on a different thread!
+            _SOKOL_UNUSED(cmd_buffer);
+            dispatch_semaphore_signal(_sg.mtl.sem);
+        }];
     }
 
     /* if this is first pass in frame, get uniform buffer base pointer */
@@ -10283,10 +11055,6 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     SOKOL_ASSERT(nil == _sg.mtl.cmd_encoder);
     SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
 
-    #if defined(_SG_TARGET_MACOS)
-    [_sg.mtl.uniform_buffers[_sg.mtl.cur_frame_rotate_index] didModifyRange:NSMakeRange(0, (NSUInteger)_sg.mtl.cur_ub_offset)];
-    #endif
-
     /* present, commit and signal semaphore when done */
     id<MTLDrawable> cur_drawable = nil;
     if (_sg.mtl.drawable_cb) {
@@ -10295,11 +11063,9 @@ _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     else {
         cur_drawable = (__bridge id<MTLDrawable>) _sg.mtl.drawable_userdata_cb(_sg.mtl.user_data);
     }
-    [_sg.mtl.cmd_buffer presentDrawable:cur_drawable];
-    [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
-        _SOKOL_UNUSED(cmd_buffer);
-        dispatch_semaphore_signal(_sg.mtl.sem);
-    }];
+    if (nil != cur_drawable) {
+        [_sg.mtl.cmd_buffer presentDrawable:cur_drawable];
+    }
     [_sg.mtl.cmd_buffer commit];
 
     /* garbage-collect resources pending for release */
@@ -11859,6 +12625,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, _
 
 _SOKOL_PRIVATE void _sg_wgpu_destroy_pipeline(_sg_pipeline_t* pip) {
     SOKOL_ASSERT(pip);
+    if (pip == _sg.wgpu.cur_pipeline) {
+        _sg.wgpu.cur_pipeline = 0;
+        _Sg.wgpu.cur_pipeline_id.id = SG_INVALID_ID;
+    }
     if (pip->wgpu.pip) {
         wgpuRenderPipelineRelease(pip->wgpu.pip);
         pip->wgpu.pip = 0;
@@ -13132,6 +13902,10 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_BUFFERDESC_DATA_SIZE:     return "immutable buffer data size differs from buffer size";
         case _SG_VALIDATE_BUFFERDESC_NO_DATA:       return "dynamic/stream usage buffers cannot be initialized with data";
 
+        /* image data (in image creation and updating) */
+        case _SG_VALIDATE_IMAGEDATA_NODATA:         return "sg_image_data: no data (.ptr and/or .size is zero)";
+        case _SG_VALIDATE_IMAGEDATA_DATA_SIZE:      return "sg_image_data: data size doesn't match expected surface size";
+
         /* image creation validation errros */
         case _SG_VALIDATE_IMAGEDESC_CANARY:             return "sg_image_desc not initialized";
         case _SG_VALIDATE_IMAGEDESC_WIDTH:              return "sg_image_desc.width must be > 0";
@@ -13142,8 +13916,9 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_IMAGEDESC_NO_MSAA_RT_SUPPORT: return "MSAA not supported for this pixel format";
         case _SG_VALIDATE_IMAGEDESC_RT_IMMUTABLE:       return "render target images must be SG_USAGE_IMMUTABLE";
         case _SG_VALIDATE_IMAGEDESC_RT_NO_DATA:         return "render target images cannot be initialized with data";
-        case _SG_VALIDATE_IMAGEDESC_DATA:               return "missing or invalid data for immutable image";
-        case _SG_VALIDATE_IMAGEDESC_NO_DATA:            return "dynamic/stream usage images cannot be initialized with data";
+        case _SG_VALIDATE_IMAGEDESC_INJECTED_NO_DATA:   return "images with injected textures cannot be initialized with data";
+        case _SG_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA:    return "dynamic/stream images cannot be initialized with data";
+        case _SG_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE:   return "compressed images must be immutable";
 
         /* shader creation */
         case _SG_VALIDATE_SHADERDESC_CANARY:                return "sg_shader_desc not initialized";
@@ -13156,6 +13931,9 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
         case _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS:         return "GL backend requires uniform block member declarations";
         case _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME:        return "uniform block member name missing";
         case _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH:      return "size of uniform block members doesn't match uniform block size";
+        case _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT:        return "uniform array count must be >= 1";
+        case _SG_VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE:  return "uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout";
+        
         case _SG_VALIDATE_SHADERDESC_NO_CONT_IMGS:          return "shader images must occupy continuous slots";
         case _SG_VALIDATE_SHADERDESC_IMG_NAME:              return "GL backend requires uniform block member names";
         case _SG_VALIDATE_SHADERDESC_ATTR_NAMES:            return "GLES2 backend requires vertex attribute names";
@@ -13238,9 +14016,6 @@ _SOKOL_PRIVATE const char* _sg_validate_string(_sg_validate_error_t err) {
 
         /* sg_update_image */
         case _SG_VALIDATE_UPDIMG_USAGE:         return "sg_update_image: cannot update immutable image";
-        case _SG_VALIDATE_UPDIMG_NOTENOUGHDATA: return "sg_update_image: not enough subimage data provided";
-        case _SG_VALIDATE_UPDIMG_SIZE:          return "sg_update_image: provided subimage data size too big";
-        case _SG_VALIDATE_UPDIMG_COMPRESSED:    return "sg_update_image: cannot update images with compressed format";
         case _SG_VALIDATE_UPDIMG_ONCE:          return "sg_update_image: only one update allowed per image and frame";
 
         default: return "unknown validation error";
@@ -13264,7 +14039,7 @@ _SOKOL_PRIVATE void _sg_validate(bool cond, _sg_validate_error_t err) {
 _SOKOL_PRIVATE bool _sg_validate_end(void) {
     if (_sg.validate_error != _SG_VALIDATE_SUCCESS) {
         #if !defined(SOKOL_VALIDATE_NON_FATAL)
-            SOKOL_LOG("^^^^  VALIDATION FAILED, TERMINATING ^^^^");
+            SOKOL_LOG("^^^^  SOKOL-GFX VALIDATION FAILED, TERMINATING ^^^^");
             SOKOL_ASSERT(false);
         #endif
         return false;
@@ -13297,6 +14072,31 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             SOKOL_VALIDATE(0 == desc->data.ptr, _SG_VALIDATE_BUFFERDESC_NO_DATA);
         }
         return SOKOL_VALIDATE_END();
+    #endif
+}
+
+_SOKOL_PRIVATE void _sg_validate_image_data(const sg_image_data* data, sg_pixel_format fmt, int width, int height, int num_faces, int num_mips, int num_slices) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(data);
+        _SOKOL_UNUSED(fmt);
+        _SOKOL_UNUSED(width);
+        _SOKOL_UNUSED(height);
+        _SOKOL_UNUSED(num_faces);
+        _SOKOL_UNUSED(num_mips);
+        _SOKOL_UNUSED(num_slices);
+    #else
+        for (int face_index = 0; face_index < num_faces; face_index++) {
+            for (int mip_index = 0; mip_index < num_mips; mip_index++) {
+                const bool has_data = data->subimage[face_index][mip_index].ptr != 0;
+                const bool has_size = data->subimage[face_index][mip_index].size > 0;
+                SOKOL_VALIDATE(has_data && has_size, _SG_VALIDATE_IMAGEDATA_NODATA);
+                const int mip_width = _sg_max(width >> mip_index, 1);
+                const int mip_height = _sg_max(height >> mip_index, 1);
+                const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
+                const int expected_size = bytes_per_slice * num_slices;
+                SOKOL_VALIDATE(expected_size == (int)data->subimage[face_index][mip_index].size, _SG_VALIDATE_IMAGEDATA_DATA_SIZE);
+            }
+        }
     #endif
 }
 
@@ -13337,24 +14137,33 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             SOKOL_VALIDATE(desc->sample_count <= 1, _SG_VALIDATE_IMAGEDESC_MSAA_BUT_NO_RT);
             const bool valid_nonrt_fmt = !_sg_is_valid_rendertarget_depth_format(fmt);
             SOKOL_VALIDATE(valid_nonrt_fmt, _SG_VALIDATE_IMAGEDESC_NONRT_PIXELFORMAT);
-            /* FIXME: should use the same "expected size" computation as in _sg_validate_update_image() here */
-            if (!injected && (usage == SG_USAGE_IMMUTABLE)) {
-                const int num_faces = desc->type == SG_IMAGETYPE_CUBE ? 6:1;
-                const int num_mips = desc->num_mipmaps;
-                for (int face_index = 0; face_index < num_faces; face_index++) {
-                    for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-                        const bool has_data = desc->data.subimage[face_index][mip_index].ptr != 0;
-                        const bool has_size = desc->data.subimage[face_index][mip_index].size > 0;
-                        SOKOL_VALIDATE(has_data && has_size, _SG_VALIDATE_IMAGEDESC_DATA);
-                    }
-                }
+            const bool is_compressed = _sg_is_compressed_pixel_format(desc->pixel_format);
+            const bool is_immutable = (usage == SG_USAGE_IMMUTABLE);
+            if (is_compressed) {
+                SOKOL_VALIDATE(is_immutable, _SG_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE);
+            }
+            if (!injected && is_immutable) {
+                // image desc must have valid data
+                _sg_validate_image_data(&desc->data,
+                    desc->pixel_format,
+                    desc->width,
+                    desc->height,
+                    (desc->type == SG_IMAGETYPE_CUBE) ? 6 : 1,
+                    desc->num_mipmaps,
+                    desc->num_slices);
             }
             else {
+                // image desc must not have data
                 for (int face_index = 0; face_index < SG_CUBEFACE_NUM; face_index++) {
                     for (int mip_index = 0; mip_index < SG_MAX_MIPMAPS; mip_index++) {
                         const bool no_data = 0 == desc->data.subimage[face_index][mip_index].ptr;
                         const bool no_size = 0 == desc->data.subimage[face_index][mip_index].size;
-                        SOKOL_VALIDATE(no_data && no_size, _SG_VALIDATE_IMAGEDESC_NO_DATA);
+                        if (injected) {
+                            SOKOL_VALIDATE(no_data && no_size, _SG_VALIDATE_IMAGEDESC_INJECTED_NO_DATA);
+                        }
+                        if (!is_immutable) {
+                            SOKOL_VALIDATE(no_data && no_size, _SG_VALIDATE_IMAGEDESC_DYNAMIC_NO_DATA);
+                        }
                     }
                 }
             }
@@ -13414,8 +14223,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 const sg_shader_uniform_block_desc* ub_desc = &stage_desc->uniform_blocks[ub_index];
                 if (ub_desc->size > 0) {
                     SOKOL_VALIDATE(uniform_blocks_continuous, _SG_VALIDATE_SHADERDESC_NO_CONT_UBS);
+                    #if defined(_SOKOL_ANY_GL)
                     bool uniforms_continuous = true;
-                    int uniform_offset = 0;
+                    uint32_t uniform_offset = 0;
                     int num_uniforms = 0;
                     for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
                         const sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
@@ -13425,14 +14235,26 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                             SOKOL_VALIDATE(0 != u_desc->name, _SG_VALIDATE_SHADERDESC_UB_MEMBER_NAME);
                             #endif
                             const int array_count = u_desc->array_count;
-                            uniform_offset += _sg_uniform_size(u_desc->type, array_count);
+                            SOKOL_VALIDATE(array_count > 0, _SG_VALIDATE_SHADERDESC_UB_ARRAY_COUNT);
+                            const uint32_t u_align = _sg_uniform_alignment(u_desc->type, array_count, ub_desc->layout);
+                            const uint32_t u_size  = _sg_uniform_size(u_desc->type, array_count, ub_desc->layout);
+                            uniform_offset = _sg_align_u32(uniform_offset, u_align);
+                            uniform_offset += u_size;
                             num_uniforms++;
+                            // with std140, arrays are only allowed for FLOAT4, INT4, MAT4
+                            if (ub_desc->layout == SG_UNIFORMLAYOUT_STD140) {
+                                if (array_count > 1) {
+                                    SOKOL_VALIDATE((u_desc->type == SG_UNIFORMTYPE_FLOAT4) || (u_desc->type == SG_UNIFORMTYPE_INT4) || (u_desc->type == SG_UNIFORMTYPE_MAT4), _SG_VALIDATE_SHADERDESC_UB_STD140_ARRAY_TYPE);
+                                }
+                            }
                         }
                         else {
                             uniforms_continuous = false;
                         }
                     }
-                    #if defined(SOKOL_GLCORE33) || defined(SOKOL_GLES2) || defined(SOKOL_GLES3)
+                    if (ub_desc->layout == SG_UNIFORMLAYOUT_STD140) {
+                        uniform_offset = _sg_align_u32(uniform_offset, 16);
+                    }
                     SOKOL_VALIDATE((size_t)uniform_offset == ub_desc->size, _SG_VALIDATE_SHADERDESC_UB_SIZE_MISMATCH);
                     SOKOL_VALIDATE(num_uniforms > 0, _SG_VALIDATE_SHADERDESC_NO_UB_MEMBERS);
                     #endif
@@ -13802,19 +14624,13 @@ _SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_i
         SOKOL_VALIDATE_BEGIN();
         SOKOL_VALIDATE(img->cmn.usage != SG_USAGE_IMMUTABLE, _SG_VALIDATE_UPDIMG_USAGE);
         SOKOL_VALIDATE(img->cmn.upd_frame_index != _sg.frame_index, _SG_VALIDATE_UPDIMG_ONCE);
-        SOKOL_VALIDATE(!_sg_is_compressed_pixel_format(img->cmn.pixel_format), _SG_VALIDATE_UPDIMG_COMPRESSED);
-        const int num_faces = (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6 : 1;
-        const int num_mips = img->cmn.num_mipmaps;
-        for (int face_index = 0; face_index < num_faces; face_index++) {
-            for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-                SOKOL_VALIDATE(0 != data->subimage[face_index][mip_index].ptr, _SG_VALIDATE_UPDIMG_NOTENOUGHDATA);
-                const int mip_width = _sg_max(img->cmn.width >> mip_index, 1);
-                const int mip_height = _sg_max(img->cmn.height >> mip_index, 1);
-                const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-                const int expected_size = bytes_per_slice * img->cmn.num_slices;
-                SOKOL_VALIDATE(data->subimage[face_index][mip_index].size <= (size_t)expected_size, _SG_VALIDATE_UPDIMG_SIZE);
-            }
-        }
+        _sg_validate_image_data(data,
+            img->cmn.pixel_format,
+            img->cmn.width,
+            img->cmn.height,
+            (img->cmn.type == SG_IMAGETYPE_CUBE) ? 6 : 1,
+            img->cmn.num_mipmaps,
+            img->cmn.num_slices);
         return SOKOL_VALIDATE_END();
     #endif
 }
@@ -13882,6 +14698,7 @@ _SOKOL_PRIVATE sg_shader_desc _sg_shader_desc_defaults(const sg_shader_desc* des
             if (0 == ub_desc->size) {
                 break;
             }
+            ub_desc->layout = _sg_def(ub_desc->layout, SG_UNIFORMLAYOUT_NATIVE);
             for (int u_index = 0; u_index < SG_MAX_UB_MEMBERS; u_index++) {
                 sg_shader_uniform_desc* u_desc = &ub_desc->uniforms[u_index];
                 if (u_desc->type == SG_UNIFORMTYPE_INVALID) {
@@ -14942,6 +15759,7 @@ SOKOL_API_IMPL void sg_apply_uniforms(sg_shader_stage stage, int ub_index, const
     }
     if (!_sg.next_draw_valid) {
         _SG_TRACE_NOARGS(err_draw_invalid);
+        return;
     }
     _sg_apply_uniforms(stage, ub_index, data);
     _SG_TRACE_ARGS(apply_uniforms, stage, ub_index, data);
@@ -15125,6 +15943,7 @@ SOKOL_API_IMPL sg_image_info sg_query_image_info(sg_image img_id) {
         info.slot.state = img->slot.state;
         info.slot.res_id = img->slot.id;
         info.slot.ctx_id = img->slot.ctx_id;
+        info.upd_frame_index = img->cmn.upd_frame_index;
         #if defined(SOKOL_D3D11)
         info.num_slots = 1;
         info.active_slot = 0;
