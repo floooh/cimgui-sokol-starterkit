@@ -64,5 +64,6 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .window_title = "Hello Sokol + Dear ImGui",
         .width = 800,
         .height = 600,
+        .icon.sokol_default = true,
     };
 }
