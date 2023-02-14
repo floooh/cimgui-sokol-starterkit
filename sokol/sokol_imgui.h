@@ -2314,15 +2314,15 @@ _SOKOL_PRIVATE void _simgui_add_input_character(ImGuiIO* io, uint32_t c) {
 }
 
 _SOKOL_PRIVATE void _simgui_update_modifiers(ImGuiIO* io, uint32_t mods) {
-    _simgui_add_imgui_key_event(io, ImGuiKey_ModCtrl, (mods & SAPP_MODIFIER_CTRL) != 0);
-    _simgui_add_imgui_key_event(io, ImGuiKey_ModShift, (mods & SAPP_MODIFIER_SHIFT) != 0);
-    _simgui_add_imgui_key_event(io, ImGuiKey_ModAlt, (mods & SAPP_MODIFIER_ALT) != 0);
-    _simgui_add_imgui_key_event(io, ImGuiKey_ModSuper, (mods & SAPP_MODIFIER_SUPER) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiMod_Ctrl, (mods & SAPP_MODIFIER_CTRL) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiMod_Shift, (mods & SAPP_MODIFIER_SHIFT) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiMod_Alt, (mods & SAPP_MODIFIER_ALT) != 0);
+    _simgui_add_imgui_key_event(io, ImGuiMod_Super, (mods & SAPP_MODIFIER_SUPER) != 0);
 }
 
 // returns Ctrl or Super, depending on platform
 _SOKOL_PRIVATE ImGuiKey _simgui_copypaste_modifier(void) {
-    return _simgui.is_osx ? ImGuiKey_ModSuper : ImGuiKey_ModCtrl;
+    return _simgui.is_osx ? ImGuiMod_Super : ImGuiMod_Ctrl;
 }
 
 SOKOL_API_IMPL int simgui_map_keycode(sapp_keycode keycode) {
@@ -2344,13 +2344,13 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             _simgui_add_focus_event(io, false);
             break;
         case SAPP_EVENTTYPE_MOUSE_DOWN:
-            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, true);
             _simgui_add_mouse_pos_event(io, ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
+            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, true);
             _simgui_update_modifiers(io, ev->modifiers);
             break;
         case SAPP_EVENTTYPE_MOUSE_UP:
-            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, false);
             _simgui_add_mouse_pos_event(io, ev->mouse_x / dpi_scale, ev->mouse_y / dpi_scale);
+            _simgui_add_mouse_button_event(io, (int)ev->mouse_button, false);
             _simgui_update_modifiers(io, ev->modifiers);
             break;
         case SAPP_EVENTTYPE_MOUSE_MOVE:
@@ -2373,15 +2373,15 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
             _simgui_add_mouse_wheel_event(io, ev->scroll_x, ev->scroll_y);
             break;
         case SAPP_EVENTTYPE_TOUCHES_BEGAN:
-            _simgui_add_mouse_button_event(io, 0, true);
             _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
+            _simgui_add_mouse_button_event(io, 0, true);
             break;
         case SAPP_EVENTTYPE_TOUCHES_MOVED:
             _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
             break;
         case SAPP_EVENTTYPE_TOUCHES_ENDED:
-            _simgui_add_mouse_button_event(io, 0, false);
             _simgui_add_mouse_pos_event(io, ev->touches[0].pos_x / dpi_scale, ev->touches[0].pos_y / dpi_scale);
+            _simgui_add_mouse_button_event(io, 0, false);
             break;
         case SAPP_EVENTTYPE_TOUCHES_CANCELLED:
             _simgui_add_mouse_button_event(io, 0, false);
