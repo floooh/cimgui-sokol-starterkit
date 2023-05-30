@@ -59,8 +59,10 @@ if (CMAKE_SYSTEM_NAME STREQUAL Emscripten)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     # use our own minimal shell.html
     target_link_options(demo PRIVATE --shell-file ../sokol/shell.html)
+    # link with WebGL2
+    target_link_options(demo PRIVATE -sUSE_WEBGL2=1)
     # WASM+JS size optimizations
-    target_link_options(demo PRIVATE -sNO_FILESYSTEM=1 -sASSERTIONS=0 -sMALLOC=emmalloc -sUSE_WEBGL2=1 --closure=1)
+    target_link_options(demo PRIVATE -sNO_FILESYSTEM=1 -sASSERTIONS=0 -sMALLOC=emmalloc --closure=1)
 endif()
 
 # explicitly strip dead code
