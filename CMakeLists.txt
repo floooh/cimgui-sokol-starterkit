@@ -9,13 +9,13 @@ if (CMAKE_SYSTEM_NAME STREQUAL Linux)
 endif()
 
 #=== LIBRARY: cimgui + Dear ImGui
-add_library(cimgui STATIC 
-    cimgui/cimgui.cpp 
-    cimgui/cimgui.h 
+add_library(cimgui STATIC
+    cimgui/cimgui.cpp
+    cimgui/cimgui.h
     cimgui/imgui/imgui.cpp
     cimgui/imgui/imgui.h
-    cimgui/imgui/imgui_widgets.cpp 
-    cimgui/imgui/imgui_draw.cpp 
+    cimgui/imgui/imgui_widgets.cpp
+    cimgui/imgui/imgui_draw.cpp
     cimgui/imgui/imgui_tables.cpp
     cimgui/imgui/imgui_demo.cpp)
 target_include_directories(cimgui INTERFACE cimgui)
@@ -60,7 +60,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL Emscripten)
     # use our own minimal shell.html
     target_link_options(demo PRIVATE --shell-file ../sokol/shell.html)
     # WASM+JS size optimizations
-    target_link_options(demo PRIVATE -sNO_FILESYSTEM=1 -sASSERTIONS=0 -sMALLOC=emmalloc --closure=1)
+    target_link_options(demo PRIVATE -sNO_FILESYSTEM=1 -sASSERTIONS=0 -sMALLOC=emmalloc -sUSE_WEBGL2=1 --closure=1)
 endif()
 
 # explicitly strip dead code
