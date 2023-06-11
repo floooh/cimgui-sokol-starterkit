@@ -20,6 +20,7 @@ static void init(void* app) {
         .logger.func = slog_func,
     });
     simgui_setup(&(simgui_desc_t){ 0 });
+    igGetIO()->ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     // initial clear color
     state.pass_action = (sg_pass_action) {
@@ -37,6 +38,7 @@ static void frame(void* app) {
     });
 
     /*=== UI CODE STARTS HERE ===*/
+    igDockSpaceOverViewport(NULL, ImGuiDockNodeFlags_PassthruCentralNode, NULL);
     app_frame((App*)app);
     /*=== UI CODE ENDS HERE ===*/
 

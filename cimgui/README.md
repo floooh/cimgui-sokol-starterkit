@@ -11,7 +11,7 @@ History:
 Initially cimgui was developed by Stephan Dilly as hand-written code but lately turned into an auto-generated version by sonoro1234 in order to keep up with imgui more easily (letting the user select the desired branch and commit)
 
 Notes:
-* currently this wrapper is based on version [1.79 of Dear ImGui with internal api]
+* currently this wrapper is based on version [1.89.5 of Dear ImGui with internal api]
 * only functions, structs and enums from imgui.h (an optionally imgui_internal.h) are wrapped.
 * if you are interested in imgui backends you should look [LuaJIT-ImGui](https://github.com/sonoro1234/LuaJIT-ImGui) project.
 * All naming is algorithmic except for those names that were coded in cimgui_overloads table (https://github.com/cimgui/cimgui/blob/master/generator/generator.lua#L60). In the official version this table is empty.
@@ -21,13 +21,14 @@ Notes:
 
 * clone 
   * `git clone --recursive https://github.com/cimgui/cimgui.git`
-  * `git submodule update`
+  * `git submodule update --init --recursive` (If already cloned)
 * compile 
   * using makefile on linux/macOS/mingw (Or use CMake to generate project)
-  * cmake options are IMGUI_STATIC (compiling as static library), IMGUI_FREETYPE (for using Freetype2) and FREETYPE_PATH (Freetype2 cmake install location)
+  * cmake options are IMGUI_STATIC (compiling as static library), IMGUI_FREETYPE (for using Freetype2) and FREETYPE_PATH (Freetype2 cmake install location) (only if cimgui is generated with freetype option)
   * or as in https://github.com/sonoro1234/LuaJIT-ImGui/tree/master/build
   
-  For compiling with backends there is now an example with SDL2 and opengl3 in folder backend_test. It will generate a cimgui_sdl module and a test_sdl executable. You only need to provide SDL_PATH telling cmake where to look for SDL2 cmake installation.
+  For compiling with backends there are now examples with SDL2 and opengl3/vulkan in folder backend_test.
+  They'll generate a cimgui_sdl module and a test_sdl executable.
 
 # using generator
 
@@ -36,13 +37,14 @@ Notes:
 * you will need LuaJIT (https://github.com/LuaJIT/LuaJIT.git better 2.1 branch) or precompiled for linux/macOS/windows in https://luapower.com/luajit/download
 * you need to use also a C++ compiler for doing preprocessing: gcc (In windows MinGW-W64-builds for example), clang or cl (MSVC). (this repo was done with gcc)
 * update `imgui` folder to the version you desire.
-* edit `generator/generator.bat` on windows, or `generator/generator.sh` on linux, to choose between gcc, clang, or cl and to choose desired backends and whether imgui_internal is generated or not and Freetype2 is used or not. 
-* the defaults of generator are gcc as compiler, imgui_internal included and sdl, glfw, opengl2 and opengl3 as backends.
+* edit `generator/generator.bat` on windows, or `generator/generator.sh` on linux, to choose between gcc, clang, or cl and to choose desired backends and whether imgui_internal is generated or not, Freetype2 is used or not and comments are generated or not
+* the defaults of generator are gcc as compiler, imgui_internal included and sdl, glfw, vulkan, opengl2 and opengl3 as backends.
 * edit config_generator.lua for adding includes needed by your chosen backends (vulkan needs that).
 * Run generator.bat or generator.sh with gcc, clang or cl and LuaJIT on your PATH.
 * as a result some files are generated: `cimgui.cpp`, `cimgui.h` and `cimgui_impl.h` for compiling and some lua/json files with information about the binding: `definitions.json` with function info, `structs_and_enums.json` with struct and enum info, `impl_definitions.json` with functions from the backends info. 
-* You can pass compiler flags to generator.sh or generator.bat at the end of the call to further specify the compiler behavior. (e.g. -DIMGUI_USER_CONFIG or -DIMGUI_USE_WCHAR32)
-
+* You can pass compiler flags to generator.sh or generator.bat by editing them at the end of the call to further specify the compiler behavior. (e.g. -DIMGUI_USER_CONFIG or -DIMGUI_USE_WCHAR32)
+* You are able to pass any extra argument to generator.sh (.bat) in the command-line.
+* If you are using different options than cimgui repo and if you want to keep them after a cimgui update, you can keep them in a copy of generator.sh (.bat) outside of cimgui folder where `cd cimgui/generator` is used before luajit call. See https://github.com/cimgui/cimgui/issues/232#issuecomment-1497059497
 # generate binding
 * C interface is exposed by cimgui.h when you define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 * with your prefered language you can use the lua or json files generated as in:
