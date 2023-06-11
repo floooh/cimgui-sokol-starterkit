@@ -8,12 +8,13 @@
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 #include "cimgui.h"
 #include "sokol_imgui.h"
+#include "app/App.h"
 
 static struct {
     sg_pass_action pass_action;
 } state;
 
-static void init(void) {
+static void init(void* app) {
     sg_setup(&(sg_desc){
         .context = sapp_sgcontext(),
         .logger.func = slog_func,
@@ -24,9 +25,10 @@ static void init(void) {
     state.pass_action = (sg_pass_action) {
         .colors[0] = { .load_action = SG_LOADACTION_CLEAR, .clear_value = { 0.0f, 0.5f, 1.0f, 1.0 } }
     };
+    app_init((App*)app);
 }
 
-static void frame(void) {
+static void frame(void* app) {
     simgui_new_frame(&(simgui_frame_desc_t){
         .width = sapp_width(),
         .height = sapp_height(),
@@ -35,11 +37,7 @@ static void frame(void) {
     });
 
     /*=== UI CODE STARTS HERE ===*/
-    igSetNextWindowPos((ImVec2){10,10}, ImGuiCond_Once, (ImVec2){0,0});
-    igSetNextWindowSize((ImVec2){400, 100}, ImGuiCond_Once);
-    igBegin("Hello Dear ImGui!", 0, ImGuiWindowFlags_None);
-    igColorEdit3("Background", &state.pass_action.colors[0].clear_value.r, ImGuiColorEditFlags_None);
-    igEnd();
+    app_frame((App*)app);
     /*=== UI CODE ENDS HERE ===*/
 
     sg_begin_default_pass(&state.pass_action, sapp_width(), sapp_height());
@@ -48,12 +46,14 @@ static void frame(void) {
     sg_commit();
 }
 
-static void cleanup(void) {
+static void cleanup(void* app) {
+    app_dispose((App*)app);
     simgui_shutdown();
     sg_shutdown();
 }
 
-static void event(const sapp_event* ev) {
+static void event(const sapp_event* ev, void* app) {
+    (void)app;
     simgui_handle_event(ev);
 }
 
@@ -61,11 +61,12 @@ sapp_desc sokol_main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
     return (sapp_desc){
-        .init_cb = init,
-        .frame_cb = frame,
-        .cleanup_cb = cleanup,
-        .event_cb = event,
-        .window_title = "Hello Sokol + Dear ImGui",
+        .user_data = app_new(),
+        .init_userdata_cb = init,
+        .frame_userdata_cb = frame,
+        .cleanup_userdata_cb = cleanup,
+        .event_userdata_cb = event,
+        .window_title = app_title(),
         .width = 800,
         .height = 600,
         .icon.sokol_default = true,

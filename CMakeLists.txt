@@ -72,3 +72,6 @@ endif()
 
 # this hack removes the xxx-CMakeForceLinker.cxx dummy file
 set_target_properties(demo PROPERTIES LINKER_LANGUAGE C)
+
+add_subdirectory(app)
+target_link_libraries(demo app)
