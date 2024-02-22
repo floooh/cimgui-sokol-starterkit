@@ -32,8 +32,8 @@
     SOKOL_METAL
     SOKOL_WGPU
 
-    Optionally provide the following configuration defines before including the
-    implementation:
+    Optionally provide the following configuration define both before including the
+    the declaration and implementation:
 
     SOKOL_IMGUI_NO_SOKOL_APP    - don't depend on sokol_app.h (see below for details)
 
@@ -1991,7 +1991,7 @@ static void _simgui_pool_free_index(_simgui_pool_t* pool, int slot_index) {
     SOKOL_ASSERT(pool->queue_top <= (pool->size-1));
 }
 
-/* initiailize a pool slot:
+/* initialize a pool slot:
     - bump the slot's generation counter
     - create a resource id from the generation counter and slot index
     - set the slot's id to this id
