@@ -36,6 +36,11 @@ To build a Release version on Windows with the VisualStudio toolchain:
 > cmake --build . --config MinSizeRel
 ```
 
+To build in w64devkit console
+```
+cmake -G "MinGW Makefiles" -DCMAKE_MAKE_PROGRAM=make ..
+cmake --build .
+```
 NOTE: on Linux you'll also need to install the 'usual' dev-packages needed for X11+GL development.
 
 ## Run:
