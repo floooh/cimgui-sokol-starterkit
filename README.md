@@ -114,8 +114,10 @@ extension will detect the CMakeLists.txt file and take over from there.
 The repository contains snapshots of the following libraries:
 
 - [Dear ImGui](https://github.com/ocornut/imgui)
-- [cimgui](https://github.com/cimgui/cimgui) (C bindings for Dear ImGui)
 - [Sokol Headers](https://github.com/floooh/sokol) (only what's needed)
+
+C bindings were generated via [dear_bindings](https://github.com/dearimgui/dear_bindings)
+and are located in [floooh/dcimgui](https://github.com/floooh/dcimgui)
 
 I'm not planning to do frequent updates to newer versions of those
 files, so the versions contained in here may be behind. Updating

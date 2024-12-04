@@ -5,7 +5,6 @@
 #include "sokol_gfx.h"
 #include "sokol_log.h"
 #include "sokol_glue.h"
-#define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 #include "cimgui.h"
 #include "sokol_imgui.h"
 
@@ -35,7 +34,7 @@ static void frame(void) {
     });
 
     /*=== UI CODE STARTS HERE ===*/
-    igSetNextWindowPos((ImVec2){10,10}, ImGuiCond_Once, (ImVec2){0,0});
+    igSetNextWindowPos((ImVec2){10,10}, ImGuiCond_Once);
     igSetNextWindowSize((ImVec2){400, 100}, ImGuiCond_Once);
     igBegin("Hello Dear ImGui!", 0, ImGuiWindowFlags_None);
     igColorEdit3("Background", &state.pass_action.colors[0].clear_value.r, ImGuiColorEditFlags_None);

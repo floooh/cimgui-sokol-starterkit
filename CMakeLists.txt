@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.20)
 project(cimgui-sokol-starterkit)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
@@ -12,12 +12,12 @@ endif()
 add_library(cimgui STATIC
     cimgui/cimgui.cpp
     cimgui/cimgui.h
-    cimgui/imgui/imgui.cpp
-    cimgui/imgui/imgui.h
-    cimgui/imgui/imgui_widgets.cpp
-    cimgui/imgui/imgui_draw.cpp
-    cimgui/imgui/imgui_tables.cpp
-    cimgui/imgui/imgui_demo.cpp)
+    cimgui/imgui.cpp
+    cimgui/imgui.h
+    cimgui/imgui_widgets.cpp
+    cimgui/imgui_draw.cpp
+    cimgui/imgui_tables.cpp
+    cimgui/imgui_demo.cpp)
 target_include_directories(cimgui INTERFACE cimgui)
 
 #=== LIBRARY: sokol
