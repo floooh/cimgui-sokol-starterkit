@@ -8,10 +8,21 @@ and hash `8103ffedfb0c42d231c6af6859a5a1a832260b43` is the last good version.
 In a bash or zsh shell:
 
 ```
+git clone --branch wasm-ld-crash https://github.com/floooh/cimgui-sokol-starterkit
+```
+```
+cd cimgui-sokol-starterkit
+```
+```
 source install_emsdk.sh
-mkdir build
-cd build
+```
+```
+mkdir build && cd build
+```
+```
 emcmake cmake -DCMAKE_BUILD_TYPE=Release ..
+```
+```
 cmake --build . -- VERBOSE=1
 ```
 
