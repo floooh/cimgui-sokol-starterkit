@@ -19,6 +19,7 @@ add_library(cimgui STATIC
     cimgui/imgui_tables.cpp
     cimgui/imgui_demo.cpp)
 target_include_directories(cimgui INTERFACE cimgui)
+target_compile_options(cimgui PUBLIC -flto)
 
 #=== LIBRARY: sokol
 # add headers to the the file list because they are useful to have in IDEs
@@ -42,6 +43,7 @@ else()
         target_link_libraries(sokol PUBLIC Threads::Threads)
     endif()
 endif()
+target_compile_options(sokol PUBLIC -flto)
 target_link_libraries(sokol PUBLIC cimgui)
 target_include_directories(sokol INTERFACE sokol)
 
@@ -53,11 +55,14 @@ else()
     add_executable(demo demo.c)
 endif()
 target_link_libraries(demo sokol)
+target_compile_options(demo PUBLIC -flto)
+target_link_options(demo PUBLIC -flto)
 
 # Emscripten-specific linker options
 if (CMAKE_SYSTEM_NAME STREQUAL Emscripten)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     # use our own minimal shell.html
+    target_compile_options(demo PRIVATE -flto)
     target_link_options(demo PRIVATE --shell-file ../sokol/shell.html)
     # link with WebGL2
     target_link_options(demo PRIVATE -sUSE_WEBGL2=1)
