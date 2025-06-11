@@ -2,8 +2,15 @@
 
 First, review the `install_emsdk.sh` script.
 
-The emsdk hash `65c4e7ad07766fdc9dc514159bd5ac4449393e17` is the first bad version,
-and hash `8103ffedfb0c42d231c6af6859a5a1a832260b43` is the last good version.
+~~The emsdk hash `65c4e7ad07766fdc9dc514159bd5ac4449393e17` is the first bad version,
+and hash `8103ffedfb0c42d231c6af6859a5a1a832260b43` is the last good version.~~
+
+Last good version: https://chromium.googlesource.com/emscripten-releases/+/848e67bef087f70999f57976248ec4358d459bbd
+
+First bad version: https://chromium.googlesource.com/emscripten-releases/+/2f2fc539017bc8e062699b5f05043a0dc2381ea4
+
+
+### Reproduction Steps
 
 In a bash or zsh shell:
 
