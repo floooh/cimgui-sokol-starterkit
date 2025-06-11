@@ -1,9 +1,9 @@
 # NOTE: run with `source install_emsdk.sh`
 
 # LAST GOOD VERSION:
-# HASH=8103ffedfb0c42d231c6af6859a5a1a832260b43
+# HASH=848e67bef087f70999f57976248ec4358d459bbd
 # FIRST BAD VERSION:
-HASH=65c4e7ad07766fdc9dc514159bd5ac4449393e17
+HASH=2f2fc539017bc8e062699b5f05043a0dc2381ea4
 
 git clone https://github.com/emscripten-core/emsdk.git
 cd emsdk
