@@ -1,4 +1,4 @@
-// dear imgui, v1.92.0
+// dear imgui, v1.92.2b
 // (main code and documentation)
 
 // Help:
@@ -24,7 +24,7 @@
 // For first-time users having issues compiling/linking/running:
 // please post in https://github.com/ocornut/imgui/discussions if you cannot find a solution in resources above.
 // Everything else should be asked in 'Issues'! We are building a database of cross-linked knowledge there.
-// Since 1.92, we encourage font loading question to also be posted in 'Issues'.
+// Since 1.92, we encourage font loading questions to also be posted in 'Issues'.
 
 // Copyright (c) 2014-2025 Omar Cornut
 // Developed by Omar Cornut and every direct or indirect contributors to the GitHub.
@@ -53,7 +53,7 @@ DOCUMENTATION
   - HOW TO UPDATE TO A NEWER VERSION OF DEAR IMGUI
   - GETTING STARTED WITH INTEGRATING DEAR IMGUI IN YOUR CODE/ENGINE
   - HOW A SIMPLE APPLICATION MAY LOOK LIKE
-  - HOW A SIMPLE RENDERING FUNCTION MAY LOOK LIKE
+  - USING CUSTOM BACKEND / CUSTOM ENGINE
 - API BREAKING CHANGES (read me when you update!)
 - FREQUENTLY ASKED QUESTIONS (FAQ)
   - Read all answers online: https://www.dearimgui.com/faq, or in docs/FAQ.md (with a Markdown viewer)
@@ -78,7 +78,7 @@ CODE
 // [SECTION] RENDER HELPERS
 // [SECTION] INITIALIZATION, SHUTDOWN
 // [SECTION] MAIN CODE (most of the code! lots of stuff, needs tidying up!)
-// [SECTION] FONTS
+// [SECTION] FONTS, TEXTURES
 // [SECTION] ID STACK
 // [SECTION] INPUTS
 // [SECTION] ERROR CHECKING, STATE RECOVERY
@@ -274,7 +274,8 @@ CODE
 
  HOW A SIMPLE APPLICATION MAY LOOK LIKE
  --------------------------------------
- EXHIBIT 1: USING THE EXAMPLE BACKENDS (= imgui_impl_XXX.cpp files from the backends/ folder).
+
+ USING THE EXAMPLE BACKENDS (= imgui_impl_XXX.cpp files from the backends/ folder).
  The sub-folders in examples/ contain examples applications following this structure.
 
      // Application init: create a dear imgui context, setup some options, load fonts
@@ -310,7 +311,27 @@ CODE
      ImGui_ImplWin32_Shutdown();
      ImGui::DestroyContext();
 
- EXHIBIT 2: IMPLEMENTING CUSTOM BACKEND / CUSTOM ENGINE
+ To decide whether to dispatch mouse/keyboard inputs to Dear ImGui to the rest of your application,
+ you should read the 'io.WantCaptureMouse', 'io.WantCaptureKeyboard' and 'io.WantTextInput' flags!
+ Please read the FAQ entry "How can I tell whether to dispatch mouse/keyboard to Dear ImGui or my application?" about this.
+
+
+USING CUSTOM BACKEND / CUSTOM ENGINE
+------------------------------------
+
+IMPLEMENTING YOUR PLATFORM BACKEND:
+ -> see https://github.com/ocornut/imgui/blob/master/docs/BACKENDS.md for basic instructions.
+ -> the Platform backends in impl_impl_XXX.cpp files contain many implementations.
+
+IMPLEMENTING YOUR RenderDrawData() function:
+ -> see https://github.com/ocornut/imgui/blob/master/docs/BACKENDS.md
+ -> the Renderer Backends in impl_impl_XXX.cpp files contain many implementations of a ImGui_ImplXXXX_RenderDrawData() function.
+
+IMPLEMENTING SUPPORT for ImGuiBackendFlags_RendererHasTextures:
+ -> see https://github.com/ocornut/imgui/blob/master/docs/BACKENDS.md
+ -> the Renderer Backends in impl_impl_XXX.cpp files contain many implementations of a ImGui_ImplXXXX_UpdateTexture() function.
+
+ Basic application/backend skeleton:
 
      // Application init: create a Dear ImGui context, setup some options, load fonts
      ImGui::CreateContext();
@@ -319,7 +340,7 @@ CODE
      io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable keyboard controls
 
      // TODO: Load TTF/OTF fonts if you don't want to use the default font.
-     io.Fonts->AddFontFromFileTTF("NotoSans.ttf", 18.0f);
+     io.Fonts->AddFontFromFileTTF("NotoSans.ttf");
 
      // Application main loop
      while (true)
@@ -361,95 +382,6 @@ CODE
      // Shutdown
      ImGui::DestroyContext();
 
- To decide whether to dispatch mouse/keyboard inputs to Dear ImGui to the rest of your application,
- you should read the 'io.WantCaptureMouse', 'io.WantCaptureKeyboard' and 'io.WantTextInput' flags!
- Please read the FAQ entry "How can I tell whether to dispatch mouse/keyboard to Dear ImGui or my application?" about this.
-
- HOW A SIMPLE RENDERING FUNCTION MAY LOOK LIKE
- ---------------------------------------------
- The backends in impl_impl_XXX.cpp files contain many working implementations of a rendering function.
-
-    void MyImGuiBackend_UpdateTexture(ImTextureData* tex)
-    {
-        if (tex->Status == ImTextureStatus_WantCreate)
-        {
-            // <create texture based on tex->Width/Height/Pixels>
-            tex->SetTexID(xxxx); // specify backend-specific ImTextureID identifier
-            tex->SetStatus(ImTextureStatus_OK);
-            tex->BackendUserData = xxxx; // store more backend data
-        }
-        if (tex->Status == ImTextureStatus_WantUpdates)
-        {
-            // <update texture blocks based on tex->UpdateRect>
-            tex->SetStatus(ImTextureStatus_OK);
-        }
-        if (tex->Status == ImTextureStatus_WantDestroy)
-        {
-            // <destroy texture>
-            tex->SetTexID(ImTextureID_Invalid);
-            tex->SetStatus(ImTextureStatus_Destroyed);
-        }
-    }
-
-    void MyImGuiBackend_RenderDrawData(ImDrawData* draw_data)
-    {
-       if (draw_data->Textures != nullptr)
-           for (ImTextureData* tex : *draw_data->Textures)
-               if (tex->Status != ImTextureStatus_OK)
-                   MyImGuiBackend_UpdateTexture(tex);
-
-
-       // TODO: Setup render state: alpha-blending enabled, no face culling, no depth testing, scissor enabled
-       // TODO: Setup texture sampling state: sample with bilinear filtering (NOT point/nearest filtering). Use 'io.Fonts->Flags |= ImFontAtlasFlags_NoBakedLines;' to allow point/nearest filtering.
-       // TODO: Setup viewport covering draw_data->DisplayPos to draw_data->DisplayPos + draw_data->DisplaySize
-       // TODO: Setup orthographic projection matrix cover draw_data->DisplayPos to draw_data->DisplayPos + draw_data->DisplaySize
-       // TODO: Setup shader: vertex { float2 pos, float2 uv, u32 color }, fragment shader sample color from 1 texture, multiply by vertex color.
-       ImVec2 clip_off = draw_data->DisplayPos;
-       for (int n = 0; n < draw_data->CmdListsCount; n++)
-       {
-          const ImDrawList* cmd_list = draw_data->CmdLists[n];
-          const ImDrawVert* vtx_buffer = cmd_list->VtxBuffer.Data;  // vertex buffer generated by Dear ImGui
-          const ImDrawIdx* idx_buffer = cmd_list->IdxBuffer.Data;   // index buffer generated by Dear ImGui
-          for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++)
-          {
-             const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
-             if (pcmd->UserCallback)
-             {
-                 if (pcmd->UserCallback == ImDrawCallback_ResetRenderState)
-                     MyEngineResetRenderState();
-                 else
-                     pcmd->UserCallback(cmd_list, pcmd);
-             }
-             else
-             {
-                 // Project scissor/clipping rectangles into framebuffer space
-                 ImVec2 clip_min(pcmd->ClipRect.x - clip_off.x, pcmd->ClipRect.y - clip_off.y);
-                 ImVec2 clip_max(pcmd->ClipRect.z - clip_off.x, pcmd->ClipRect.w - clip_off.y);
-                 if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
-                     continue;
-
-                 // We are using scissoring to clip some objects. All low-level graphics API should support it.
-                 // - If your engine doesn't support scissoring yet, you may ignore this at first. You will get some small glitches
-                 //   (some elements visible outside their bounds) but you can fix that once everything else works!
-                 // - Clipping coordinates are provided in imgui coordinates space:
-                 //   - For a given viewport, draw_data->DisplayPos == viewport->Pos and draw_data->DisplaySize == viewport->Size
-                 //   - In a single viewport application, draw_data->DisplayPos == (0,0) and draw_data->DisplaySize == io.DisplaySize, but always use GetMainViewport()->Pos/Size instead of hardcoding those values.
-                 //   - In the interest of supporting multi-viewport applications (see 'docking' branch on github),
-                 //     always subtract draw_data->DisplayPos from clipping bounds to convert them to your viewport space.
-                 // - Note that pcmd->ClipRect contains Min+Max bounds. Some graphics API may use Min+Max, other may use Min+Size (size being Max-Min)
-                 MyEngineSetScissor(clip_min.x, clip_min.y, clip_max.x, clip_max.y);
-
-                 // The texture for the draw call is specified by pcmd->GetTexID().
-                 // The vast majority of draw calls will use the Dear ImGui texture atlas, which value you have set yourself during initialization.
-                 MyEngineBindTexture((MyTexture*)pcmd->GetTexID());
-
-                 // Render 'pcmd->ElemCount/3' indexed triangles.
-                 // By default the indices ImDrawIdx are 16-bit, you can change them to 32-bit in imconfig.h if your engine doesn't support 16-bit indices.
-                 MyEngineDrawIndexedTriangles(pcmd->ElemCount, sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, idx_buffer + pcmd->IdxOffset, vtx_buffer, pcmd->VtxOffset);
-             }
-          }
-       }
-    }
 
 
  API BREAKING CHANGES
@@ -460,7 +392,9 @@ CODE
  When you are not sure about an old symbol or function name, try using the Search/Find function of your IDE to look for comments or references in all imgui files.
  You can read releases logs https://github.com/ocornut/imgui/releases for more details.
 
- - 2025/06/25 (1.92.0) - layout: commented out legacy ErrorCheckUsingSetCursorPosToExtendParentBoundaries() fallback obsoleted in 1.89 (August 2022) which allowed a SetCursorPos()/SetCursorScreenPos() call WITHOUT AN ITEM
+ - 2025/08/08 (1.92.2) - Backends: SDL_GPU3: Changed ImTextureID type from SDL_GPUTextureSamplerBinding* to SDL_GPUTexture*, which is more natural and easier for user to manage. If you need to change the current sampler, you can access the ImGui_ImplSDLGPU3_RenderState struct. (#8866, #8163, #7998, #7988)
+ - 2025/07/31 (1.92.2) - Tabs: Renamed ImGuiTabBarFlags_FittingPolicyResizeDown to ImGuiTabBarFlags_FittingPolicyShrink. Kept inline redirection enum (will obsolete).
+ - 2025/06/25 (1.92.0) - Layout: commented out legacy ErrorCheckUsingSetCursorPosToExtendParentBoundaries() fallback obsoleted in 1.89 (August 2022) which allowed a SetCursorPos()/SetCursorScreenPos() call WITHOUT AN ITEM
                          to extend parent window/cell boundaries. Replaced with assert/tooltip that would already happens if previously using IMGUI_DISABLE_OBSOLETE_FUNCTIONS. (#5548, #4510, #3355, #1760, #1490, #4152, #150)
                          - Incorrect way to make a window content size 200x200:
                               Begin(...) + SetCursorScreenPos(GetCursorScreenPos() + ImVec2(200,200)) + End();
@@ -484,9 +418,12 @@ CODE
                          - To use old behavior: use 'ImGui::PushFont(font, font->LegacySize)' at call site.
                          - Kept inline single parameter function. Will obsolete.
                        - Fonts: **IMPORTANT** on Font Merging:
-                         - When searching for a glyph in multiple merged fonts: font inputs are now scanned in orderfor the first font input which the desired glyph. This is technically a different behavior than before!
-                         - e.g. If you are merging fonts you may have glyphs that you expected to load from Font Source 2 which exists in Font Source 1. After the update and when using a new backend, those glyphs may now loaded from Font Source 1!
-                         - You can use `ImFontConfig::GlyphExcludeRanges[]` to specify ranges to ignore in given Input:
+                         - When searching for a glyph in multiple merged fonts: we search for the FIRST font source which contains the desired glyph.
+                           Because the user doesn't need to provide glyph ranges any more, it is possible that a glyph that you expected to fetch from a secondary/merged icon font may be erroneously fetched from the primary font.
+                         - When searching for a glyph in multiple merged fonts: we now search for the FIRST font source which contains the desired glyph. This is technically a different behavior than before!
+                         - e.g. If you are merging fonts you may have glyphs that you expected to load from Font Source 2 which exists in Font Source 1.
+                           After the update and when using a new backend, those glyphs may now loaded from Font Source 1!
+                         - We added `ImFontConfig::GlyphExcludeRanges[]` to specify ranges to exclude from a given font source:
                              // Add Font Source 1 but ignore ICON_MIN_FA..ICON_MAX_FA range
                              static ImWchar exclude_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
                              ImFontConfig cfg1;
@@ -497,6 +434,8 @@ CODE
                              cfg2.MergeMode = true;
                              io.Fonts->AddFontFromFileTTF("FontAwesome4.ttf", 0.0f, &cfg2);
                          - You can use `Metrics/Debugger->Fonts->Font->Input Glyphs Overlap Detection Tool` to see list of glyphs available in multiple font sources. This can facilitate unde
+                       - Fonts: **IMPORTANT** on Thread Safety:
+                          - A few functions such as font->CalcTextSizeA() were, by sheer luck (== accidentally) thread-safe even thou we had never provided that guarantee. They are definitively not thread-safe anymore as new glyphs may be loaded.
                        - Fonts: ImFont::FontSize was removed and does not make sense anymore. ImFont::LegacySize is the size passed to AddFont().
                        - Fonts: Removed support for PushFont(NULL) which was a shortcut for "default font".
                        - Fonts: Renamed/moved 'io.FontGlobalScale' to 'style.FontScaleMain'.
@@ -510,15 +449,18 @@ CODE
                        - Fonts: obsoleted ImFont::Scale which is not useful anymore.
                        - Fonts: generally reworked Internals of ImFontAtlas and ImFont. While in theory a vast majority of users shouldn't be affected, some use cases or extensions might be. Among other things:
                           - ImDrawCmd::TextureId has been changed to ImDrawCmd::TexRef.
+                          - ImFontAtlas::TexID has been changed to ImFontAtlas::TexRef.
                           - ImFontAtlas::ConfigData[] has been renamed to ImFontAtlas::Sources[]
                           - ImFont::ConfigData[], ConfigDataCount has been renamed to Sources[], SourceCount.
                           - Each ImFont has a number of ImFontBaked instances corresponding to actively used sizes. ImFont::GetFontBaked(size) retrieves the one for a given size.
                           - Fields moved from ImFont to ImFontBaked: IndexAdvanceX[], Glyphs[], Ascent, Descent, FindGlyph(), FindGlyphNoFallback(), GetCharAdvance().
+                          - Fields moved from ImFontAtlas to ImFontAtlas->Tex: ImFontAtlas::TexWidth => TexData->Width, ImFontAtlas::TexHeight => TexData->Height, ImFontAtlas::TexPixelsAlpha8/TexPixelsRGBA32 => TexData->GetPixels().
                           - Widget code may use ImGui::GetFontBaked() instead of ImGui::GetFont() to access font data for current font at current font size (and you may use font->GetFontBaked(size) to access it for any other size.)
                        - Fonts: (users of imgui_freetype): renamed ImFontAtlas::FontBuilderFlags to ImFontAtlas::FontLoaderFlags. Renamed ImFontConfig::FontBuilderFlags to ImFontConfig::FontLoaderFlags. Renamed ImGuiFreeTypeBuilderFlags to ImGuiFreeTypeLoaderFlags.
                          If you used runtime imgui_freetype selection rather than the default IMGUI_ENABLE_FREETYPE compile-time option: Renamed/reworked ImFontBuilderIO into ImFontLoader. Renamed ImGuiFreeType::GetBuilderForFreeType() to ImGuiFreeType::GetFontLoader().
                            - old:  io.Fonts->FontBuilderIO = ImGuiFreeType::GetBuilderForFreeType()
-                           - new:  io.Fonts.FontLoader = ImGuiFreeType::GetFontLoader()
+                           - new:  io.Fonts->FontLoader = ImGuiFreeType::GetFontLoader()
+                           - new:  io.Fonts->SetFontLoader(ImGuiFreeType::GetFontLoader()) to change dynamically at runtime [from 1.92.1]
                        - Fonts: (users of custom rectangles, see #8466): Renamed AddCustomRectRegular() to AddCustomRect(). Added GetCustomRect() as a replacement for GetCustomRectByIndex() + CalcCustomRectUV().
                            - The output type of GetCustomRect() is now ImFontAtlasRect, which include UV coordinates. X->x, Y->y, Width->w, Height->h.
                            - old:
@@ -1349,7 +1291,7 @@ static float            NavUpdatePageUpPageDown();
 static inline void      NavUpdateAnyRequestFlag();
 static void             NavUpdateCreateWrappingRequest();
 static void             NavEndFrame();
-static bool             NavScoreItem(ImGuiNavItemData* result);
+static bool             NavScoreItem(ImGuiNavItemData* result, const ImRect& nav_bb);
 static void             NavApplyItemToResult(ImGuiNavItemData* result);
 static void             NavProcessItem();
 static void             NavProcessItemForTabbingRequest(ImGuiID id, ImGuiItemFlags item_flags, ImGuiNavMoveFlags move_flags);
@@ -1477,6 +1419,8 @@ ImGuiStyle::ImGuiStyle()
     ImageBorderSize             = 0.0f;             // Thickness of border around tabs.
     TabRounding                 = 5.0f;             // Radius of upper corners of a tab. Set to 0.0f to have rectangular tabs.
     TabBorderSize               = 0.0f;             // Thickness of border around tabs.
+    TabMinWidthBase             = 1.0f;             // Minimum tab width, to make tabs larger than their contents. TabBar buttons are not affected.
+    TabMinWidthShrink           = 80.0f;            // Minimum tab width after shrinking, when using ImGuiTabBarFlags_FittingPolicyMixed policy.
     TabCloseButtonMinWidthSelected   = -1.0f;       // -1: always visible. 0.0f: visible when hovered. >0.0f: visible when hovered if minimum width.
     TabCloseButtonMinWidthUnselected = 0.0f;        // -1: always visible. 0.0f: visible when hovered. >0.0f: visible when hovered if minimum width. FLT_MAX: never show close button when unselected.
     TabBarBorderSize            = 1.0f;             // Thickness of tab-bar separator, which takes on the tab active color to denote focus.
@@ -1543,6 +1487,8 @@ void ImGuiStyle::ScaleAllSizes(float scale_factor)
     LogSliderDeadzone = ImTrunc(LogSliderDeadzone * scale_factor);
     ImageBorderSize = ImTrunc(ImageBorderSize * scale_factor);
     TabRounding = ImTrunc(TabRounding * scale_factor);
+    TabMinWidthBase = ImTrunc(TabMinWidthBase * scale_factor);
+    TabMinWidthShrink = ImTrunc(TabMinWidthShrink * scale_factor);
     TabCloseButtonMinWidthSelected = (TabCloseButtonMinWidthSelected > 0.0f && TabCloseButtonMinWidthSelected != FLT_MAX) ? ImTrunc(TabCloseButtonMinWidthSelected * scale_factor) : TabCloseButtonMinWidthSelected;
     TabCloseButtonMinWidthUnselected = (TabCloseButtonMinWidthUnselected > 0.0f && TabCloseButtonMinWidthUnselected != FLT_MAX) ? ImTrunc(TabCloseButtonMinWidthUnselected * scale_factor) : TabCloseButtonMinWidthUnselected;
     TabBarOverlineSize = ImTrunc(TabBarOverlineSize * scale_factor);
@@ -2644,11 +2590,11 @@ static inline int ImTextCharToUtf8_inline(char* buf, int buf_size, unsigned int 
     return 0;
 }
 
-const char* ImTextCharToUtf8(char out_buf[5], unsigned int c)
+int ImTextCharToUtf8(char out_buf[5], unsigned int c)
 {
     int count = ImTextCharToUtf8_inline(out_buf, 5, c);
     out_buf[count] = 0;
-    return out_buf;
+    return count;
 }
 
 // Not optimal but we very rarely use this function.
@@ -3185,7 +3131,7 @@ static void ImGuiListClipper_SeekCursorAndSetupPrevLine(float pos_y, float line_
             ImGui::TableEndRow(table);
         table->RowPosY2 = window->DC.CursorPos.y;
         const int row_increase = (int)((off_y / line_height) + 0.5f);
-        //table->CurrentRow += row_increase; // Can't do without fixing TableEndRow()
+        table->CurrentRow += row_increase;
         table->RowBgColorCounter += row_increase;
     }
 }
@@ -3562,6 +3508,8 @@ static const ImGuiStyleVarInfo GStyleVarsInfo[] =
     { 1, ImGuiDataType_Float, (ImU32)offsetof(ImGuiStyle, ImageBorderSize) },           // ImGuiStyleVar_ImageBorderSize
     { 1, ImGuiDataType_Float, (ImU32)offsetof(ImGuiStyle, TabRounding) },               // ImGuiStyleVar_TabRounding
     { 1, ImGuiDataType_Float, (ImU32)offsetof(ImGuiStyle, TabBorderSize) },             // ImGuiStyleVar_TabBorderSize
+    { 1, ImGuiDataType_Float, (ImU32)offsetof(ImGuiStyle, TabMinWidthBase) },           // ImGuiStyleVar_TabMinWidthBase
+    { 1, ImGuiDataType_Float, (ImU32)offsetof(ImGuiStyle, TabMinWidthShrink) },         // ImGuiStyleVar_TabMinWidthShrink
     { 1, ImGuiDataType_Float, (ImU32)offsetof(ImGuiStyle, TabBarBorderSize) },          // ImGuiStyleVar_TabBarBorderSize
     { 1, ImGuiDataType_Float, (ImU32)offsetof(ImGuiStyle, TabBarOverlineSize) },        // ImGuiStyleVar_TabBarOverlineSize
     { 1, ImGuiDataType_Float, (ImU32)offsetof(ImGuiStyle, TableAngledHeadersAngle)},    // ImGuiStyleVar_TableAngledHeadersAngle
@@ -4094,7 +4042,7 @@ ImGuiContext::ImGuiContext(ImFontAtlas* shared_font_atlas)
     WheelingWindowStartFrame = WheelingWindowScrolledFrame = -1;
     WheelingWindowReleaseTimer = 0.0f;
 
-    DebugDrawIdConflicts = 0;
+    DebugDrawIdConflictsId = 0;
     DebugHookIdInfo = 0;
     HoveredId = HoveredIdPreviousFrame = 0;
     HoveredIdPreviousFrameItemCount = 0;
@@ -4115,6 +4063,7 @@ ImGuiContext::ImGuiContext(ImFontAtlas* shared_font_atlas)
     ActiveIdClickOffset = ImVec2(-1, -1);
     ActiveIdWindow = NULL;
     ActiveIdSource = ImGuiInputSource_None;
+    ActiveIdDisabledId = 0;
     ActiveIdMouseButton = -1;
     ActiveIdPreviousFrame = 0;
     memset(&DeactivatedItemData, 0, sizeof(DeactivatedItemData));
@@ -4323,6 +4272,12 @@ void ImGui::Initialize()
             g.KeysMayBeCharInput.SetBit(key);
 
 #ifdef IMGUI_HAS_DOCK
+#endif
+
+    // Print a debug message when running with debug feature IMGUI_DEBUG_HIGHLIGHT_ALL_ID_CONFLICTS because it is very slow.
+    // DO NOT COMMENT OUT THIS MESSAGE. IT IS DESIGNED TO REMIND YOU THAT IMGUI_DEBUG_HIGHLIGHT_ALL_ID_CONFLICTS SHOULD ONLY BE TEMPORARILY ENABLED.
+#ifdef IMGUI_DEBUG_HIGHLIGHT_ALL_ID_CONFLICTS
+    DebugLog("IMGUI_DEBUG_HIGHLIGHT_ALL_ID_CONFLICTS is enabled.\nMust disable after use! Otherwise Dear ImGui will run slower.\n");
 #endif
 
     // ImDrawList/ImFontAtlas are designed to function without ImGui, and 99% of it works without an ImGui context.
@@ -4557,15 +4512,6 @@ void ImGui::SetActiveID(ImGuiID id, ImGuiWindow* window)
     // Clear previous active id
     if (g.ActiveId != 0)
     {
-        // While most behaved code would make an effort to not steal active id during window move/drag operations,
-        // we at least need to be resilient to it. Canceling the move is rather aggressive and users of 'master' branch
-        // may prefer the weird ill-defined half working situation ('docking' did assert), so may need to rework that.
-        if (g.MovingWindow != NULL && g.ActiveId == g.MovingWindow->MoveId)
-        {
-            IMGUI_DEBUG_LOG_ACTIVEID("SetActiveID() cancel MovingWindow\n");
-            g.MovingWindow = NULL;
-        }
-
         // Store deactivate data
         ImGuiDeactivatedItemData* deactivated_data = &g.DeactivatedItemData;
         deactivated_data->ID = g.ActiveId;
@@ -4578,6 +4524,15 @@ void ImGui::SetActiveID(ImGuiID id, ImGuiWindow* window)
         // One common scenario leading to this is: pressing Key ->NavMoveRequestApplyResult() -> ClearActiveID()
         if (g.InputTextState.ID == g.ActiveId)
             InputTextDeactivateHook(g.ActiveId);
+
+        // While most behaved code would make an effort to not steal active id during window move/drag operations,
+        // we at least need to be resilient to it. Canceling the move is rather aggressive and users of 'master' branch
+        // may prefer the weird ill-defined half working situation ('docking' did assert), so may need to rework that.
+        if (g.MovingWindow != NULL && g.ActiveId == g.MovingWindow->MoveId)
+        {
+            IMGUI_DEBUG_LOG_ACTIVEID("SetActiveID() cancel MovingWindow\n");
+            StopMouseMovingWindow();
+        }
     }
 
     // Set active id
@@ -4601,6 +4556,7 @@ void ImGui::SetActiveID(ImGuiID id, ImGuiWindow* window)
     g.ActiveIdWindow = window;
     g.ActiveIdHasBeenEditedThisFrame = false;
     g.ActiveIdFromShortcut = false;
+    g.ActiveIdDisabledId = 0;
     if (id)
     {
         g.ActiveIdIsAlive = id;
@@ -4744,8 +4700,17 @@ bool ImGui::IsItemHovered(ImGuiHoveredFlags flags)
         const ImGuiID id = g.LastItemData.ID;
         if ((flags & ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) == 0)
             if (g.ActiveId != 0 && g.ActiveId != id && !g.ActiveIdAllowOverlap)
-                if (g.ActiveId != window->MoveId)
+            {
+                // When ActiveId == MoveId it means that either:
+                // - (1) user clicked on void _or_ an item with no id, which triggers moving window (ActiveId is set even when window has _NoMove flag)
+                //   - the (id == 0) test handles it, however, IsItemHovered() will leak between id==0 items (mostly visible when using _NoMove). // FIXME: May be fixed.
+                // - (2) user clicked a disabled item. UpdateMouseMovingWindowEndFrame() uses ActiveId == MoveId to avoid interference with item logic + sets ActiveIdDisabledId.
+                bool cancel_is_hovered = true;
+                if (g.ActiveId == window->MoveId && (id == 0 || g.ActiveIdDisabledId == id))
+                    cancel_is_hovered = false;
+                if (cancel_is_hovered)
                     return false;
+            }
 
         // Test if interactions on this window are blocked by an active popup or modal.
         // The ImGuiHoveredFlags_AllowWhenBlockedByPopup flag will be tested here.
@@ -4792,7 +4757,8 @@ bool ImGui::IsItemHovered(ImGuiHoveredFlags flags)
     return true;
 }
 
-// Internal facing ItemHoverable() used when submitting widgets. Differs slightly from IsItemHovered().
+// Internal facing ItemHoverable() used when submitting widgets. THIS IS A SUBMISSION NOT A HOVER CHECK.
+// Returns whether the item was hovered, logic differs slightly from IsItemHovered().
 // (this does not rely on LastItemData it can be called from a ButtonBehavior() call not following an ItemAdd() call)
 // FIXME-LEGACY: the 'ImGuiItemFlags item_flags' parameter was added on 2023-06-28.
 // If you used this in your legacy/custom widgets code:
@@ -4804,11 +4770,12 @@ bool ImGui::ItemHoverable(const ImRect& bb, ImGuiID id, ImGuiItemFlags item_flag
     ImGuiWindow* window = g.CurrentWindow;
 
     // Detect ID conflicts
+    // (this is specifically done here by comparing on hover because it allows us a detection of duplicates that is algorithmically extra cheap, 1 u32 compare per item. No O(log N) lookup whatsoever)
 #ifndef IMGUI_DISABLE_DEBUG_TOOLS
     if (id != 0 && g.HoveredIdPreviousFrame == id && (item_flags & ImGuiItemFlags_AllowDuplicateId) == 0)
     {
         g.HoveredIdPreviousFrameItemCount++;
-        if (g.DebugDrawIdConflicts == id)
+        if (g.DebugDrawIdConflictsId == id)
             window->DrawList->AddRect(bb.Min - ImVec2(1,1), bb.Max + ImVec2(1,1), IM_COL32(255, 0, 0, 255), 0.0f, ImDrawFlags_None, 2.0f);
     }
 #endif
@@ -4824,7 +4791,7 @@ bool ImGui::ItemHoverable(const ImRect& bb, ImGuiID id, ImGuiItemFlags item_flag
         if (!g.ActiveIdFromShortcut)
             return false;
 
-    // Done with rectangle culling so we can perform heavier checks now.
+    // We are done with rectangle culling so we can perform heavier checks now.
     if (!(item_flags & ImGuiItemFlags_NoWindowHoverableCheck) && !IsWindowContentHoverable(window, ImGuiHoveredFlags_None))
     {
         g.HoveredIdIsDisabled = true;
@@ -5129,6 +5096,19 @@ void ImGui::StartMouseMovingWindow(ImGuiWindow* window)
         g.MovingWindow = window;
 }
 
+// This is not 100% symetric with StartMouseMovingWindow().
+// We do NOT clear ActiveID, because:
+// - It would lead to rather confusing recursive code paths. Caller can call ClearActiveID() if desired.
+// - Some code intentionally cancel moving but keep the ActiveID to lock inputs (e.g. code path taken when clicking a disabled item).
+void ImGui::StopMouseMovingWindow()
+{
+    ImGuiContext& g = *GImGui;
+
+    // [nb: docking branch has more stuff in this function]
+
+    g.MovingWindow = NULL;
+}
+
 // Handle mouse moving window
 // Note: moving window with the navigation keys (Square + d-pad / CTRL+TAB + Arrows) are processed in NavUpdateWindowing()
 // FIXME: We don't have strong guarantee that g.MovingWindow stay synced with g.ActiveId == g.MovingWindow->MoveId.
@@ -5152,7 +5132,7 @@ void ImGui::UpdateMouseMovingWindowNewFrame()
         }
         else
         {
-            g.MovingWindow = NULL;
+            StopMouseMovingWindow();
             ClearActiveID();
         }
     }
@@ -5194,6 +5174,9 @@ void ImGui::UpdateMouseMovingWindowEndFrame()
         {
             StartMouseMovingWindow(g.HoveredWindow); //-V595
 
+            // FIXME: In principal we might be able to call StopMouseMovingWindow() below.
+            // Please note how StartMouseMovingWindow() and StopMouseMovingWindow() and not entirely symetrical, at the later doesn't clear ActiveId.
+
             // Cancel moving if clicked outside of title bar
             if (g.IO.ConfigWindowsMoveFromTitleBarOnly)
                 if (!(root_window->Flags & ImGuiWindowFlags_NoTitleBar))
@@ -5201,9 +5184,12 @@ void ImGui::UpdateMouseMovingWindowEndFrame()
                         g.MovingWindow = NULL;
 
             // Cancel moving if clicked over an item which was disabled or inhibited by popups
-            // (when g.HoveredIdIsDisabled == true && g.HoveredId == 0 we are inhibited by popups, when g.HoveredIdIsDisabled == true && g.HoveredId != 0 we are over a disabled item)0 already)
+            // (when g.HoveredIdIsDisabled == true && g.HoveredId == 0 we are inhibited by popups, when g.HoveredIdIsDisabled == true && g.HoveredId != 0 we are over a disabled item)
             if (g.HoveredIdIsDisabled)
+            {
                 g.MovingWindow = NULL;
+                g.ActiveIdDisabledId = g.HoveredId;
+            }
         }
         else if (root_window == NULL && g.NavWindow != NULL)
         {
@@ -5315,46 +5301,6 @@ void ImGui::UpdateHoveredWindowAndCaptureFlags(const ImVec2& mouse_pos)
     io.WantTextInput = (g.WantTextInputNextFrame != -1) ? (g.WantTextInputNextFrame != 0) : false;
 }
 
-static void ImGui::UpdateTexturesNewFrame()
-{
-    // Cannot update every atlases based on atlas's FrameCount < g.FrameCount, because an atlas may be shared by multiple contexts with different frame count.
-    ImGuiContext& g = *GImGui;
-    const bool has_textures = (g.IO.BackendFlags & ImGuiBackendFlags_RendererHasTextures) != 0;
-    for (ImFontAtlas* atlas : g.FontAtlases)
-    {
-        if (atlas->OwnerContext == &g)
-        {
-            ImFontAtlasUpdateNewFrame(atlas, g.FrameCount, has_textures);
-        }
-        else
-        {
-            // (1) If you manage font atlases yourself, e.g. create a ImFontAtlas yourself you need to call ImFontAtlasUpdateNewFrame() on it.
-            // Otherwise, calling ImGui::CreateContext() without parameter will create an atlas owned by the context.
-            // (2) If you have multiple font atlases, make sure the 'atlas->RendererHasTextures' as specified in the ImFontAtlasUpdateNewFrame() call matches for that.
-            // (3) If you have multiple imgui contexts, they also need to have a matching value for ImGuiBackendFlags_RendererHasTextures.
-            IM_ASSERT(atlas->Builder != NULL && atlas->Builder->FrameCount != -1);
-            IM_ASSERT(atlas->RendererHasTextures == has_textures);
-        }
-    }
-}
-
-// Build a single texture list
-static void ImGui::UpdateTexturesEndFrame()
-{
-    ImGuiContext& g = *GImGui;
-    g.PlatformIO.Textures.resize(0);
-    for (ImFontAtlas* atlas : g.FontAtlases)
-        for (ImTextureData* tex : atlas->TexList)
-        {
-            // We provide this information so backends can decide whether to destroy textures.
-            // This means in practice that if N imgui contexts are created with a shared atlas, we assume all of them have a backend initialized.
-            tex->RefCount = (unsigned short)atlas->RefCount;
-            g.PlatformIO.Textures.push_back(tex);
-        }
-    for (ImTextureData* tex : g.UserTextures)
-        g.PlatformIO.Textures.push_back(tex);
-}
-
 // Called once a frame. Followed by SetCurrentFont() which sets up the remaining data.
 // FIXME-VIEWPORT: the concept of a single ClipRectFullscreen is not ideal!
 static void SetupDrawListSharedData()
@@ -5436,9 +5382,9 @@ void ImGui::NewFrame()
 
     // [DEBUG]
     if (!g.IO.ConfigDebugHighlightIdConflicts || !g.IO.KeyCtrl) // Count is locked while holding CTRL
-        g.DebugDrawIdConflicts = 0;
+        g.DebugDrawIdConflictsId = 0;
     if (g.IO.ConfigDebugHighlightIdConflicts && g.HoveredIdPreviousFrameItemCount > 1)
-        g.DebugDrawIdConflicts = g.HoveredIdPreviousFrame;
+        g.DebugDrawIdConflictsId = g.HoveredIdPreviousFrame;
 
     // Update HoveredId data
     if (!g.HoveredIdPreviousFrame)
@@ -7672,12 +7618,19 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
         }
 #endif
 
+        // Decide if we are going to handle borders and resize grips
+        // 'window->SkipItems' is not updated yet so for child windows we rely on ParentWindow to avoid submitting decorations. (#8815)
+        // Whenever we add support for full decorated child windows we will likely make this logic more general.
+        bool handle_borders_and_resize_grips = true;
+        if ((flags & ImGuiWindowFlags_ChildWindow) && window->ParentWindow->SkipItems)
+            handle_borders_and_resize_grips = false;
+
         // Handle manual resize: Resize Grips, Borders, Gamepad
         int border_hovered = -1, border_held = -1;
         ImU32 resize_grip_col[4] = {};
         const int resize_grip_count = ((flags & ImGuiWindowFlags_ChildWindow) && !(flags & ImGuiWindowFlags_Popup)) ? 0 : g.IO.ConfigWindowsResizeFromEdges ? 2 : 1; // Allow resize from lower-left if we have the mouse cursor feedback for it.
         const float resize_grip_draw_size = IM_TRUNC(ImMax(g.FontSize * 1.10f, window->WindowRounding + 1.0f + g.FontSize * 0.2f));
-        if (!window->Collapsed)
+        if (handle_borders_and_resize_grips && !window->Collapsed)
             if (int auto_fit_mask = UpdateWindowManualResize(window, size_auto_fit, &border_hovered, &border_held, resize_grip_count, &resize_grip_col[0], visibility_rect))
             {
                 if (auto_fit_mask & (1 << ImGuiAxis_X))
@@ -7814,7 +7767,6 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
             // Handle title bar, scrollbar, resize grips and resize borders
             const ImGuiWindow* window_to_highlight = g.NavWindowingTarget ? g.NavWindowingTarget : g.NavWindow;
             const bool title_bar_is_highlight = want_focus || (window_to_highlight && window->RootWindowForTitleBarHighlight == window_to_highlight->RootWindowForTitleBarHighlight);
-            const bool handle_borders_and_resize_grips = true; // This exists to facilitate merge with 'docking' branch.
             RenderWindowDecorations(window, title_bar_rect, title_bar_is_highlight, handle_borders_and_resize_grips, resize_grip_count, resize_grip_col, resize_grip_draw_size);
 
             if (render_decorations_in_parent)
@@ -8725,11 +8677,13 @@ bool ImGui::IsRectVisible(const ImVec2& rect_min, const ImVec2& rect_max)
 }
 
 //-----------------------------------------------------------------------------
-// [SECTION] FONTS
+// [SECTION] FONTS, TEXTURES
 //-----------------------------------------------------------------------------
 // Most of the relevant font logic is in imgui_draw.cpp.
 // Those are high-level support functions.
 //-----------------------------------------------------------------------------
+// - UpdateTexturesNewFrame() [Internal]
+// - UpdateTexturesEndFrame() [Internal]
 // - UpdateFontsNewFrame() [Internal]
 // - UpdateFontsEndFrame() [Internal]
 // - GetDefaultFont() [Internal]
@@ -8743,6 +8697,46 @@ bool ImGui::IsRectVisible(const ImVec2& rect_min, const ImVec2& rect_max)
 // - PushFont()
 // - PopFont()
 //-----------------------------------------------------------------------------
+
+static void ImGui::UpdateTexturesNewFrame()
+{
+    // Cannot update every atlases based on atlas's FrameCount < g.FrameCount, because an atlas may be shared by multiple contexts with different frame count.
+    ImGuiContext& g = *GImGui;
+    const bool has_textures = (g.IO.BackendFlags & ImGuiBackendFlags_RendererHasTextures) != 0;
+    for (ImFontAtlas* atlas : g.FontAtlases)
+    {
+        if (atlas->OwnerContext == &g)
+        {
+            ImFontAtlasUpdateNewFrame(atlas, g.FrameCount, has_textures);
+        }
+        else
+        {
+            // (1) If you manage font atlases yourself, e.g. create a ImFontAtlas yourself you need to call ImFontAtlasUpdateNewFrame() on it.
+            // Otherwise, calling ImGui::CreateContext() without parameter will create an atlas owned by the context.
+            // (2) If you have multiple font atlases, make sure the 'atlas->RendererHasTextures' as specified in the ImFontAtlasUpdateNewFrame() call matches for that.
+            // (3) If you have multiple imgui contexts, they also need to have a matching value for ImGuiBackendFlags_RendererHasTextures.
+            IM_ASSERT(atlas->Builder != NULL && atlas->Builder->FrameCount != -1);
+            IM_ASSERT(atlas->RendererHasTextures == has_textures);
+        }
+    }
+}
+
+// Build a single texture list
+static void ImGui::UpdateTexturesEndFrame()
+{
+    ImGuiContext& g = *GImGui;
+    g.PlatformIO.Textures.resize(0);
+    for (ImFontAtlas* atlas : g.FontAtlases)
+        for (ImTextureData* tex : atlas->TexList)
+        {
+            // We provide this information so backends can decide whether to destroy textures.
+            // This means in practice that if N imgui contexts are created with a shared atlas, we assume all of them have a backend initialized.
+            tex->RefCount = (unsigned short)atlas->RefCount;
+            g.PlatformIO.Textures.push_back(tex);
+        }
+    for (ImTextureData* tex : g.UserTextures)
+        g.PlatformIO.Textures.push_back(tex);
+}
 
 void ImGui::UpdateFontsNewFrame()
 {
@@ -8786,16 +8780,19 @@ ImFont* ImGui::GetDefaultFont()
     return g.IO.FontDefault ? g.IO.FontDefault : atlas->Fonts[0];
 }
 
+// EXPERIMENTAL: DO NOT USE YET.
 void ImGui::RegisterUserTexture(ImTextureData* tex)
 {
     ImGuiContext& g = *GImGui;
-    IM_ASSERT(tex->RefCount > 0);
+    tex->RefCount++;
     g.UserTextures.push_back(tex);
 }
 
 void ImGui::UnregisterUserTexture(ImTextureData* tex)
 {
     ImGuiContext& g = *GImGui;
+    IM_ASSERT(tex->RefCount > 0);
+    tex->RefCount--;
     g.UserTextures.find_erase(tex);
 }
 
@@ -8856,11 +8853,14 @@ void ImGui::UpdateCurrentFontSize(float restore_font_size_after_scaling)
     g.Style.FontSizeBase = g.FontSizeBase;
 
     // Early out to avoid hidden window keeping bakes referenced and out of GC reach.
-    // However this would leave a pretty subtle and damning error surface area if g.FontBaked was mismatching, so for now we null it.
+    // However this would leave a pretty subtle and damning error surface area if g.FontBaked was mismatching.
     // FIXME: perhaps g.FontSize should be updated?
     if (window != NULL && window->SkipItems)
-        if (g.CurrentTable == NULL || g.CurrentTable->CurrentColumn != -1) // See 8465#issuecomment-2951509561. Ideally the SkipItems=true in tables would be amended with extra data.
+    {
+        ImGuiTable* table = g.CurrentTable;
+        if (table == NULL || (table->CurrentColumn != -1 && table->Columns[table->CurrentColumn].IsSkipItems == false)) // See 8465#issuecomment-2951509561 and #8865. Ideally the SkipItems=true in tables would be amended with extra data.
             return;
+    }
 
     // Restoring is pretty much only used by PopFont()
     float final_size = (restore_font_size_after_scaling > 0.0f) ? restore_font_size_after_scaling : 0.0f;
@@ -8888,7 +8888,7 @@ void ImGui::UpdateCurrentFontSize(float restore_font_size_after_scaling)
     // - We started rounding in 1.90 WIP (18991) as our layout system currently doesn't support non-rounded font size well yet.
     // - We may support it better later and remove this rounding.
     final_size = GetRoundedFontSize(final_size);
-    final_size = ImMax(1.0f, final_size);
+    final_size = ImClamp(final_size, 1.0f, IMGUI_FONT_SIZE_MAX);
     if (g.Font != NULL && (g.IO.BackendFlags & ImGuiBackendFlags_RendererHasTextures))
         g.Font->CurrentRasterizerDensity = g.FontRasterizerDensity;
     g.FontSize = final_size;
@@ -10189,13 +10189,17 @@ void ImGui::SetNextFrameWantCaptureMouse(bool want_capture_mouse)
 static const char* GetInputSourceName(ImGuiInputSource source)
 {
     const char* input_source_names[] = { "None", "Mouse", "Keyboard", "Gamepad" };
-    IM_ASSERT(IM_ARRAYSIZE(input_source_names) == ImGuiInputSource_COUNT && source >= 0 && source < ImGuiInputSource_COUNT);
+    IM_ASSERT(IM_ARRAYSIZE(input_source_names) == ImGuiInputSource_COUNT);
+    if (source < 0 || source >= ImGuiInputSource_COUNT)
+        return "Unknown";
     return input_source_names[source];
 }
 static const char* GetMouseSourceName(ImGuiMouseSource source)
 {
     const char* mouse_source_names[] = { "Mouse", "TouchScreen", "Pen" };
-    IM_ASSERT(IM_ARRAYSIZE(mouse_source_names) == ImGuiMouseSource_COUNT && source >= 0 && source < ImGuiMouseSource_COUNT);
+    IM_ASSERT(IM_ARRAYSIZE(mouse_source_names) == ImGuiMouseSource_COUNT);
+    if (source < 0 || source >= ImGuiMouseSource_COUNT)
+        return "Unknown";
     return mouse_source_names[source];
 }
 static void DebugPrintInputEvent(const char* prefix, const ImGuiInputEvent* e)
@@ -10901,9 +10905,9 @@ void ImGui::ErrorCheckEndFrameFinalizeErrorTooltip()
 {
 #ifndef IMGUI_DISABLE_DEBUG_TOOLS
     ImGuiContext& g = *GImGui;
-    if (g.DebugDrawIdConflicts != 0 && g.IO.KeyCtrl == false)
+    if (g.DebugDrawIdConflictsId != 0 && g.IO.KeyCtrl == false)
         g.DebugDrawIdConflictsCount = g.HoveredIdPreviousFrameItemCount;
-    if (g.DebugDrawIdConflicts != 0 && g.DebugItemPickerActive == false && BeginErrorTooltip())
+    if (g.DebugDrawIdConflictsId != 0 && g.DebugItemPickerActive == false && BeginErrorTooltip())
     {
         Text("Programmer error: %d visible items with conflicting ID!", g.DebugDrawIdConflictsCount);
         BulletText("Code should use PushID()/PopID() in loops, or append \"##xx\" to same-label identifiers!");
@@ -11072,6 +11076,21 @@ bool ImGui::ItemAdd(const ImRect& bb, ImGuiID id, const ImRect* nav_bb_arg, ImGu
         // Empty identifier are valid and useful in a small amount of cases, but 99.9% of the time you want to use "##something".
         // READ THE FAQ: https://dearimgui.com/faq
         IM_ASSERT(id != window->ID && "Cannot have an empty ID at the root of a window. If you need an empty label, use ## and read the FAQ about how the ID Stack works!");
+
+        // [DEBUG] Highlight all conflicts WITHOUT needing to hover. THIS WILL SLOW DOWN DEAR IMGUI. DON'T KEEP ACTIVATED.
+        // This will only work for items submitted with ItemAdd(). Some very rare/odd/unrecommended code patterns are calling ButtonBehavior() without ItemAdd().
+#ifdef IMGUI_DEBUG_HIGHLIGHT_ALL_ID_CONFLICTS
+        if ((g.LastItemData.ItemFlags & ImGuiItemFlags_AllowDuplicateId) == 0)
+        {
+            int* p_alive = g.DebugDrawIdConflictsAliveCount.GetIntRef(id, -1); // Could halve lookups if we knew ImGuiStorage can store 64-bit, or by storing FrameCount as 30-bits + highlight as 2-bits. But the point is that we should not pretend that this is fast.
+            int* p_highlight = g.DebugDrawIdConflictsHighlightSet.GetIntRef(id, -1);
+            if (*p_alive == g.FrameCount)
+                *p_highlight = g.FrameCount;
+            *p_alive = g.FrameCount;
+            if (*p_highlight >= g.FrameCount - 1)
+                window->DrawList->AddRect(bb.Min - ImVec2(1, 1), bb.Max + ImVec2(1, 1), IM_COL32(255, 0, 0, 255), 0.0f, ImDrawFlags_None, 2.0f);
+        }
+#endif
     }
     //if (g.IO.KeyAlt) window->DrawList->AddRect(bb.Min, bb.Max, IM_COL32(255,255,0,120)); // [DEBUG]
     //if ((g.LastItemData.ItemFlags & ImGuiItemFlags_NoNav) == 0)
@@ -12540,10 +12559,10 @@ bool ImGui::IsWindowFocused(ImGuiFocusedFlags flags)
 
     IM_ASSERT(cur_window); // Not inside a Begin()/End()
     const bool popup_hierarchy = (flags & ImGuiFocusedFlags_NoPopupHierarchy) == 0;
-    if (flags & ImGuiHoveredFlags_RootWindow)
+    if (flags & ImGuiFocusedFlags_RootWindow)
         cur_window = GetCombinedRootWindow(cur_window, popup_hierarchy);
 
-    if (flags & ImGuiHoveredFlags_ChildWindows)
+    if (flags & ImGuiFocusedFlags_ChildWindows)
         return IsWindowChildOf(ref_window, cur_window, popup_hierarchy);
     else
         return (ref_window == cur_window);
@@ -12865,7 +12884,7 @@ static float inline NavScoreItemDistInterval(float cand_min, float cand_max, flo
 }
 
 // Scoring function for keyboard/gamepad directional navigation. Based on https://gist.github.com/rygorous/6981057
-static bool ImGui::NavScoreItem(ImGuiNavItemData* result)
+static bool ImGui::NavScoreItem(ImGuiNavItemData* result, const ImRect& nav_bb)
 {
     ImGuiContext& g = *GImGui;
     ImGuiWindow* window = g.CurrentWindow;
@@ -12873,7 +12892,7 @@ static bool ImGui::NavScoreItem(ImGuiNavItemData* result)
         return false;
 
     // FIXME: Those are not good variables names
-    ImRect cand = g.LastItemData.NavRect;   // Current item nav rectangle
+    ImRect cand = nav_bb;                   // Current item nav rectangle
     const ImRect curr = g.NavScoringRect;   // Current modified source rect (NB: we've applied Max.x = Min.x in NavUpdate() to inhibit the effect of having varied item width)
     g.NavScoringDebugCount++;
 
@@ -13040,13 +13059,13 @@ static void ImGui::NavProcessItem()
     const ImGuiID id = g.LastItemData.ID;
     const ImGuiItemFlags item_flags = g.LastItemData.ItemFlags;
 
-    // When inside a container that isn't scrollable with Left<>Right, clip NavRect accordingly (#2221)
+    // When inside a container that isn't scrollable with Left<>Right, clip NavRect accordingly (#2221, #8816)
+    ImRect nav_bb = g.LastItemData.NavRect;
     if (window->DC.NavIsScrollPushableX == false)
     {
-        g.LastItemData.NavRect.Min.x = ImClamp(g.LastItemData.NavRect.Min.x, window->ClipRect.Min.x, window->ClipRect.Max.x);
-        g.LastItemData.NavRect.Max.x = ImClamp(g.LastItemData.NavRect.Max.x, window->ClipRect.Min.x, window->ClipRect.Max.x);
+        nav_bb.Min.x = ImClamp(nav_bb.Min.x, window->ClipRect.Min.x, window->ClipRect.Max.x);
+        nav_bb.Max.x = ImClamp(nav_bb.Max.x, window->ClipRect.Min.x, window->ClipRect.Max.x);
     }
-    const ImRect nav_bb = g.LastItemData.NavRect;
 
     // Process Init Request
     if (g.NavInitRequest && g.NavLayer == window->DC.NavLayerCurrent && (item_flags & ImGuiItemFlags_Disabled) == 0)
@@ -13078,14 +13097,14 @@ static void ImGui::NavProcessItem()
             else if (g.NavId != id || (g.NavMoveFlags & ImGuiNavMoveFlags_AllowCurrentNavId))
             {
                 ImGuiNavItemData* result = (window == g.NavWindow) ? &g.NavMoveResultLocal : &g.NavMoveResultOther;
-                if (NavScoreItem(result))
+                if (NavScoreItem(result, nav_bb))
                     NavApplyItemToResult(result);
 
                 // Features like PageUp/PageDown need to maintain a separate score for the visible set of items.
                 const float VISIBLE_RATIO = 0.70f;
                 if ((g.NavMoveFlags & ImGuiNavMoveFlags_AlsoScoreVisibleSet) && window->ClipRect.Overlaps(nav_bb))
                     if (ImClamp(nav_bb.Max.y, window->ClipRect.Min.y, window->ClipRect.Max.y) - ImClamp(nav_bb.Min.y, window->ClipRect.Min.y, window->ClipRect.Max.y) >= (nav_bb.Max.y - nav_bb.Min.y) * VISIBLE_RATIO)
-                        if (NavScoreItem(&g.NavMoveResultLocalVisible))
+                        if (NavScoreItem(&g.NavMoveResultLocalVisible, nav_bb))
                             NavApplyItemToResult(&g.NavMoveResultLocalVisible);
             }
         }
@@ -13745,6 +13764,7 @@ void ImGui::NavUpdateCreateMoveRequest()
         }
     }
 
+    // Prepare scoring rectangle.
     // For scoring we use a single segment on the left side our current item bounding box (not touching the edge to avoid box overlap with zero-spaced items)
     ImRect scoring_rect;
     if (window != NULL)
@@ -14155,6 +14175,7 @@ static void ImGui::NavUpdateWindowingApplyFocus(ImGuiWindow* apply_focus_window)
         SetNavCursorVisibleAfterMove();
         ClosePopupsOverWindow(apply_focus_window, false);
         FocusWindow(apply_focus_window, ImGuiFocusRequestFlags_RestoreFocusedChild);
+        IM_ASSERT(g.NavWindow != NULL);
         apply_focus_window = g.NavWindow;
         if (apply_focus_window->NavLastIds[0] == 0)
             NavInitWindow(apply_focus_window, false);
@@ -14203,9 +14224,16 @@ static void ImGui::NavUpdateWindowing()
     const bool nav_keyboard_active = (io.ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard) != 0;
     const bool keyboard_next_window = allow_windowing && g.ConfigNavWindowingKeyNext && Shortcut(g.ConfigNavWindowingKeyNext, ImGuiInputFlags_Repeat | ImGuiInputFlags_RouteAlways, owner_id);
     const bool keyboard_prev_window = allow_windowing && g.ConfigNavWindowingKeyPrev && Shortcut(g.ConfigNavWindowingKeyPrev, ImGuiInputFlags_Repeat | ImGuiInputFlags_RouteAlways, owner_id);
-    const bool start_windowing_with_gamepad = allow_windowing && nav_gamepad_active && !g.NavWindowingTarget && Shortcut(ImGuiKey_NavGamepadMenu, ImGuiInputFlags_RouteAlways, owner_id);
+    const bool start_toggling_with_gamepad = nav_gamepad_active && !g.NavWindowingTarget && Shortcut(ImGuiKey_NavGamepadMenu, ImGuiInputFlags_RouteAlways, owner_id);
+    const bool start_windowing_with_gamepad = allow_windowing && start_toggling_with_gamepad;
     const bool start_windowing_with_keyboard = allow_windowing && !g.NavWindowingTarget && (keyboard_next_window || keyboard_prev_window); // Note: enabled even without NavEnableKeyboard!
     bool just_started_windowing_from_null_focus = false;
+    if (start_toggling_with_gamepad)
+    {
+        g.NavWindowingToggleLayer = true; // Gamepad starts toggling layer
+        g.NavWindowingToggleKey = ImGuiKey_NavGamepadMenu;
+        g.NavWindowingInputSource = g.NavInputSource = ImGuiInputSource_Gamepad;
+    }
     if (start_windowing_with_gamepad || start_windowing_with_keyboard)
         if (ImGuiWindow* window = g.NavWindow ? g.NavWindow : FindWindowNavFocusable(g.WindowsFocusOrder.Size - 1, -INT_MAX, -1))
         {
@@ -14213,7 +14241,6 @@ static void ImGui::NavUpdateWindowing()
                 g.NavWindowingTarget = g.NavWindowingTargetAnim = window->RootWindow; // Current location
             g.NavWindowingTimer = g.NavWindowingHighlightAlpha = 0.0f;
             g.NavWindowingAccumDeltaPos = g.NavWindowingAccumDeltaSize = ImVec2(0.0f, 0.0f);
-            g.NavWindowingToggleLayer = start_windowing_with_gamepad ? true : false; // Gamepad starts toggling layer
             g.NavWindowingInputSource = g.NavInputSource = start_windowing_with_keyboard ? ImGuiInputSource_Keyboard : ImGuiInputSource_Gamepad;
             if (g.NavWindow == NULL)
                 just_started_windowing_from_null_focus = true;
@@ -15693,10 +15720,14 @@ static void Platform_SetImeDataFn_DefaultImpl(ImGuiContext*, ImGuiViewport*, ImG
 //-----------------------------------------------------------------------------
 // [SECTION] METRICS/DEBUGGER WINDOW
 //-----------------------------------------------------------------------------
+// - MetricsHelpMarker() [Internal]
 // - DebugRenderViewportThumbnail() [Internal]
 // - RenderViewportsThumbnails() [Internal]
+// - DebugRenderKeyboardPreview() [Internal]
 // - DebugTextEncoding()
-// - MetricsHelpMarker() [Internal]
+// - DebugFlashStyleColorStop() [Internal]
+// - DebugFlashStyleColor()
+// - UpdateDebugToolFlashStyleColor() [Internal]
 // - ShowFontAtlas() [Internal but called by Demo!]
 // - DebugNodeTexture() [Internal]
 // - ShowMetricsWindow()
@@ -15713,6 +15744,21 @@ static void Platform_SetImeDataFn_DefaultImpl(ImGuiContext*, ImGuiViewport*, ImG
 // - DebugNodeWindowsList() [Internal]
 // - DebugNodeWindowsListByBeginStackParent() [Internal]
 //-----------------------------------------------------------------------------
+
+#if !defined(IMGUI_DISABLE_DEMO_WINDOWS) || !defined(IMGUI_DISABLE_DEBUG_TOOLS)
+// Avoid naming collision with imgui_demo.cpp's HelpMarker() for unity builds.
+static void MetricsHelpMarker(const char* desc)
+{
+    ImGui::TextDisabled("(?)");
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(desc);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+#endif
 
 #ifndef IMGUI_DISABLE_DEBUG_TOOLS
 
@@ -15902,19 +15948,6 @@ static const char* FormatTextureIDForDebugDisplay(char* buf, int buf_size, const
     return FormatTextureIDForDebugDisplay(buf, (int)(buf_end - buf), cmd->TexRef.GetTexID()); // Calling TexRef::GetTexID() to avoid assert of cmd->GetTexID()
 }
 
-// Avoid naming collision with imgui_demo.cpp's HelpMarker() for unity builds.
-static void MetricsHelpMarker(const char* desc)
-{
-    ImGui::TextDisabled("(?)");
-    if (ImGui::BeginItemTooltip())
-    {
-        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-        ImGui::TextUnformatted(desc);
-        ImGui::PopTextWrapPos();
-        ImGui::EndTooltip();
-    }
-}
-
 #ifdef IMGUI_ENABLE_FREETYPE
 namespace ImGuiFreeType { IMGUI_API const ImFontLoader* GetFontLoader(); IMGUI_API bool DebugEditFontLoaderFlags(unsigned int* p_font_builder_flags); }
 #endif
@@ -15935,12 +15968,18 @@ void ImGui::ShowFontAtlas(ImFontAtlas* atlas)
         style._NextFrameFontSizeBase = style.FontSizeBase; // FIXME: Temporary hack until we finish remaining work.
     SameLine(0.0f, 0.0f); Text(" (out %.2f)", GetFontSize());
     SameLine(); MetricsHelpMarker("- This is scaling font only. General scaling will come later.");
-    DragFloat("FontScaleMain", &style.FontScaleMain, 0.02f, 0.5f, 5.0f);
+    DragFloat("FontScaleMain", &style.FontScaleMain, 0.02f, 0.5f, 4.0f);
     //BeginDisabled(io.ConfigDpiScaleFonts);
-    DragFloat("FontScaleDpi", &style.FontScaleDpi, 0.02f, 0.5f, 5.0f);
+    DragFloat("FontScaleDpi", &style.FontScaleDpi, 0.02f, 0.5f, 4.0f);
     //SetItemTooltip("When io.ConfigDpiScaleFonts is set, this value is automatically overwritten.");
     //EndDisabled();
-    BulletText("Warning: Font scaling will NOT be smooth, because\nImGuiBackendFlags_RendererHasTextures is not set!");
+    if ((io.BackendFlags & ImGuiBackendFlags_RendererHasTextures) == 0)
+    {
+        BulletText("Warning: Font scaling will NOT be smooth, because\nImGuiBackendFlags_RendererHasTextures is not set!");
+        BulletText("For instructions, see:");
+        SameLine();
+        TextLinkOpenURL("docs/BACKENDS.md", "https://github.com/ocornut/imgui/blob/master/docs/BACKENDS.md");
+    }
     BulletText("Load a nice font for better results!");
     BulletText("Please submit feedback:");
     SameLine(); TextLinkOpenURL("#8465", "https://github.com/ocornut/imgui/issues/8465");
@@ -15961,7 +16000,7 @@ void ImGui::ShowFontAtlas(ImFontAtlas* atlas)
 #ifdef IMGUI_ENABLE_STB_TRUETYPE
         const ImFontLoader* loader_stbtruetype = ImFontAtlasGetFontLoaderForStbTruetype();
         if (RadioButton("stb_truetype", loader_current == loader_stbtruetype))
-            ImFontAtlasBuildSetupFontLoader(atlas, loader_stbtruetype);
+            atlas->SetFontLoader(loader_stbtruetype);
 #else
         BeginDisabled();
         RadioButton("stb_truetype", false);
@@ -15972,7 +16011,7 @@ void ImGui::ShowFontAtlas(ImFontAtlas* atlas)
 #ifdef IMGUI_ENABLE_FREETYPE
         const ImFontLoader* loader_freetype = ImGuiFreeType::GetFontLoader();
         if (RadioButton("FreeType", loader_current == loader_freetype))
-            ImFontAtlasBuildSetupFontLoader(atlas, loader_freetype);
+            atlas->SetFontLoader(loader_freetype);
         if (loader_current == loader_freetype)
         {
             unsigned int loader_flags = atlas->FontLoaderFlags;
@@ -16179,6 +16218,10 @@ void ImGui::ShowMetricsWindow(bool* p_open)
             return ImRect();
         }
     };
+
+#ifdef IMGUI_DEBUG_HIGHLIGHT_ALL_ID_CONFLICTS
+    TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "IMGUI_DEBUG_HIGHLIGHT_ALL_ID_CONFLICTS is enabled.\nMust disable after use! Otherwise Dear ImGui will run slower.\n");
+#endif
 
     // Tools
     if (TreeNode("Tools"))
@@ -16946,14 +16989,16 @@ void ImGui::DebugNodeFont(ImFont* font)
 #endif
 
     char c_str[5];
-    Text("Fallback character: '%s' (U+%04X)", ImTextCharToUtf8(c_str, font->FallbackChar), font->FallbackChar);
-    Text("Ellipsis character: '%s' (U+%04X)", ImTextCharToUtf8(c_str, font->EllipsisChar), font->EllipsisChar);
+    ImTextCharToUtf8(c_str, font->FallbackChar);
+    Text("Fallback character: '%s' (U+%04X)", c_str, font->FallbackChar);
+    ImTextCharToUtf8(c_str, font->EllipsisChar);
+    Text("Ellipsis character: '%s' (U+%04X)", c_str, font->EllipsisChar);
 
     for (int src_n = 0; src_n < font->Sources.Size; src_n++)
     {
         ImFontConfig* src = font->Sources[src_n];
-        if (TreeNode(src, "Input %d: \'%s\', Oversample: %d,%d, PixelSnapH: %d, Offset: (%.1f,%.1f)",
-            src_n, src->Name, src->OversampleH, src->OversampleV, src->PixelSnapH, src->GlyphOffset.x, src->GlyphOffset.y))
+        if (TreeNode(src, "Input %d: \'%s\' [%d], Oversample: %d,%d, PixelSnapH: %d, Offset: (%.1f,%.1f)",
+            src_n, src->Name, src->FontNo, src->OversampleH, src->OversampleV, src->PixelSnapH, src->GlyphOffset.x, src->GlyphOffset.y))
         {
             const ImFontLoader* loader = src->FontLoader ? src->FontLoader : atlas->FontLoader;
             Text("Loader: '%s'", loader->Name ? loader->Name : "N/A");
@@ -16989,7 +17034,10 @@ void ImGui::DebugNodeFont(ImFont* font)
                     {
                         char utf8_buf[5];
                         for (unsigned int n = c; n < c_end; n++)
-                            BulletText("Codepoint U+%04X (%s)", n, ImTextCharToUtf8(utf8_buf, n));
+                        {
+                            ImTextCharToUtf8(utf8_buf, n);
+                            BulletText("Codepoint U+%04X (%s)", n, utf8_buf);
+                        }
                         TreePop();
                     }
                     TableNextColumn();

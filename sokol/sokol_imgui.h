@@ -2653,8 +2653,8 @@ static void _simgui_update_texture(ImTextureData* tex) {
         SOKOL_ASSERT(img.id != SG_INVALID_ID);
         sg_image_data img_data;
         _simgui_clear(&img_data, sizeof(img_data));
-        img_data.subimage[0][0].ptr = _simgui_imtexturedata_getpixels(tex);
-        img_data.subimage[0][0].size = (size_t)_simgui_imtexturedata_getsizeinbytes(tex);
+        img_data.mip_levels[0].ptr = _simgui_imtexturedata_getpixels(tex);
+        img_data.mip_levels[0].size = (size_t)_simgui_imtexturedata_getsizeinbytes(tex);
         sg_update_image(img, &img_data);
         _simgui_imtexturedata_setstatus(tex, ImTextureStatus_OK);
     }
@@ -2916,6 +2916,8 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     ImGuiIO* io = _simgui_imgui_get_io();
     io->DisplaySize.x = ((float)desc->width) / _simgui.cur_dpi_scale;
     io->DisplaySize.y = ((float)desc->height) / _simgui.cur_dpi_scale;
+    io->DisplayFramebufferScale.x = _simgui.cur_dpi_scale;
+    io->DisplayFramebufferScale.y = _simgui.cur_dpi_scale;
     io->DeltaTime = (float)desc->delta_time;
     #if !defined(SOKOL_IMGUI_NO_SOKOL_APP)
         if (io->WantTextInput && !sapp_keyboard_shown()) {
@@ -3032,9 +3034,8 @@ SOKOL_API_IMPL void simgui_render(void) {
     }
 
     // render the ImGui command list
-    const float dpi_scale = _simgui.cur_dpi_scale;
-    const int fb_width = (int) (io->DisplaySize.x * dpi_scale);
-    const int fb_height = (int) (io->DisplaySize.y * dpi_scale);
+    const int fb_width = (int) (io->DisplaySize.x * draw_data->FramebufferScale.x);
+    const int fb_height = (int) (io->DisplaySize.y * draw_data->FramebufferScale.y);
     sg_apply_viewport(0, 0, fb_width, fb_height, true);
     sg_apply_scissor_rect(0, 0, fb_width, fb_height, true);
 
@@ -3087,10 +3088,10 @@ SOKOL_API_IMPL void simgui_render(void) {
                     bind.vertex_buffer_offsets[0] = vb_offset + (int)(pcmd->VtxOffset * sizeof(ImDrawVert));
                     sg_apply_bindings(&bind);
                 }
-                const int scissor_x = (int) (pcmd->ClipRect.x * dpi_scale);
-                const int scissor_y = (int) (pcmd->ClipRect.y * dpi_scale);
-                const int scissor_w = (int) ((pcmd->ClipRect.z - pcmd->ClipRect.x) * dpi_scale);
-                const int scissor_h = (int) ((pcmd->ClipRect.w - pcmd->ClipRect.y) * dpi_scale);
+                const int scissor_x = (int) (pcmd->ClipRect.x * draw_data->FramebufferScale.x);
+                const int scissor_y = (int) (pcmd->ClipRect.y * draw_data->FramebufferScale.y);
+                const int scissor_w = (int) ((pcmd->ClipRect.z - pcmd->ClipRect.x) * draw_data->FramebufferScale.x);
+                const int scissor_h = (int) ((pcmd->ClipRect.w - pcmd->ClipRect.y) * draw_data->FramebufferScale.y);
                 sg_apply_scissor_rect(scissor_x, scissor_y, scissor_w, scissor_h, true);
                 sg_draw((int)pcmd->IdxOffset, (int)pcmd->ElemCount, 1);
             }

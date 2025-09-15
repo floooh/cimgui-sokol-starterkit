@@ -3731,6 +3731,11 @@ CIMGUI_API void              cimgui::ImFontAtlas_CompactCache(cimgui::ImFontAtla
     reinterpret_cast<::ImFontAtlas*>(self)->CompactCache();
 }
 
+CIMGUI_API void              cimgui::ImFontAtlas_SetFontLoader(cimgui::ImFontAtlas* self, const cimgui::ImFontLoader* font_loader)
+{
+    reinterpret_cast<::ImFontAtlas*>(self)->SetFontLoader(reinterpret_cast<const ::ImFontLoader*>(font_loader));
+}
+
 CIMGUI_API void              cimgui::ImFontAtlas_ClearInputData(cimgui::ImFontAtlas* self)
 {
     reinterpret_cast<::ImFontAtlas*>(self)->ClearInputData();
