@@ -2,7 +2,7 @@
 // **DO NOT EDIT DIRECTLY**
 // https://github.com/dearimgui/dear_bindings
 
-// dear imgui, v1.92.2b
+// dear imgui, v1.92.4
 struct ImVector_ImFontBakedPtr_t { int Size; int Capacity; ImFontBaked** Data; };  // Instantiation of ImVector<ImFontBaked*>
 struct ImVector_ImFontAtlasPtr_t { int Size; int Capacity; ImFontAtlas** Data; };  // Instantiation of ImVector<ImFontAtlas*>
 // (internal structures/api)
@@ -84,8 +84,8 @@ extern "C"
 #ifdef _MSC_VER
 #pragma warning (push)
 #pragma warning (disable: 4251)      // class 'xxx' needs to have dll-interface to be used by clients of struct 'xxx' // when IMGUI_API is set to__declspec(dllexport)
-#pragma warning (disable: 26812)     // The enum type 'xxx' is unscoped. Prefer 'enum class' over 'enum' (Enum.3). [MSVC Static Analyzer)
 #pragma warning (disable: 26495)     // [Static Analyzer] Variable 'XXX' is uninitialized. Always initialize a member variable (type.6).
+#pragma warning (disable: 26812)     // [Static Analyzer] The enum type 'xxx' is unscoped. Prefer 'enum class' over 'enum' (Enum.3).
 #if defined(_MSC_VER)&& _MSC_VER >= 1922
 #pragma warning (disable: 5054)      // operator '|': deprecated between enumerations of different types
 #endif// MSVC 2019 16.2 or later
@@ -278,6 +278,7 @@ typedef int ImGuiLocKey;      // -> enum ImGuiLocKey              // Enum: a loc
 typedef int ImGuiLayoutType;  // -> enum ImGuiLayoutType_         // Enum: Horizontal or vertical
 
 // Flags
+typedef int ImDrawTextFlags;            // -> enum ImDrawTextFlags_         // Flags: for ImTextCalcWordWrapPositionEx()
 typedef int ImGuiActivateFlags;         // -> enum ImGuiActivateFlags_      // Flags: for navigation/focus function (will be for ActivateItem() later)
 typedef int ImGuiDebugLogFlags;         // -> enum ImGuiDebugLogFlags_      // Flags: for ShowDebugLogWindow(), g.DebugLogFlags
 typedef int ImGuiFocusRequestFlags;     // -> enum ImGuiFocusRequestFlags_  // Flags: for FocusWindow()
@@ -415,6 +416,8 @@ typedef ImU16 ImGuiTableDrawChannelIdx;
 #define IM_PRIu64   "llu"
 #define IM_PRIX64   "llX"
 #endif // #if defined(_MSC_VER)&&!defined(__clang__)
+#define IM_TEXTUREID_TO_U64(_TEXID) ((ImU64)(intptr_t)(_TEXID))
+
 //-----------------------------------------------------------------------------
 // [SECTION] Generic helpers
 // Note that the ImXXX helpers functions are lower-level than ImGui functions.
@@ -443,10 +446,11 @@ typedef ImU16 ImGuiTableDrawChannelIdx;
 //-----------------------------------------------------------------------------
 
 // Helpers: Hashing
-CIMGUI_API ImGuiID cImHashData(const void* data, size_t data_size);                                     // Implied seed = 0
-CIMGUI_API ImGuiID cImHashDataEx(const void* data, size_t data_size, ImGuiID seed /* = 0 */);
-CIMGUI_API ImGuiID cImHashStr(const char* data);                                                        // Implied data_size = 0, seed = 0
-CIMGUI_API ImGuiID cImHashStrEx(const char* data, size_t data_size /* = 0 */, ImGuiID seed /* = 0 */);
+CIMGUI_API ImGuiID     cImHashData(const void* data, size_t data_size);                                     // Implied seed = 0
+CIMGUI_API ImGuiID     cImHashDataEx(const void* data, size_t data_size, ImGuiID seed /* = 0 */);
+CIMGUI_API ImGuiID     cImHashStr(const char* data);                                                        // Implied data_size = 0, seed = 0
+CIMGUI_API ImGuiID     cImHashStrEx(const char* data, size_t data_size /* = 0 */, ImGuiID seed /* = 0 */);
+CIMGUI_API const char* cImHashSkipUncontributingPrefix(const char* label);
 
 // Helpers: Color Blending
 CIMGUI_API ImU32 cImAlphaBlendColors(ImU32 col_a, ImU32 col_b);
@@ -503,6 +507,18 @@ CIMGUI_API int         cImTextCountUtf8BytesFromChar(const char* in_text, const 
 CIMGUI_API int         cImTextCountUtf8BytesFromStr(const ImWchar* in_text, const ImWchar* in_text_end);                       // return number of bytes to express string in UTF-8
 CIMGUI_API const char* cImTextFindPreviousUtf8Codepoint(const char* in_text_start, const char* in_text_curr);                  // return previous UTF-8 code-point.
 CIMGUI_API int         cImTextCountLines(const char* in_text, const char* in_text_end);                                        // return number of lines taken by text. trailing carriage return doesn't count as an extra line.
+
+// Helpers: High-level text functions (DO NOT USE!!! THIS IS A MINIMAL SUBSET OF LARGER UPCOMING CHANGES)
+typedef enum
+{
+    ImDrawTextFlags_None           = 0,
+    ImDrawTextFlags_CpuFineClip    = 1<<0,  // Must be == 1/true for legacy with 'bool cpu_fine_clip' arg to RenderText()
+    ImDrawTextFlags_WrapKeepBlanks = 1<<1,
+    ImDrawTextFlags_StopOnNewLine  = 1<<2,
+} ImDrawTextFlags_;
+CIMGUI_API ImVec2      cImFontCalcTextSizeEx(ImFont* font, float size, float max_width, float wrap_width, const char* text_begin, const char* text_end_display, const char* text_end, const char** out_remaining, ImVec2* out_offset, ImDrawTextFlags flags);
+CIMGUI_API const char* cImFontCalcWordWrapPositionEx(ImFont* font, float size, const char* text, const char* text_end, float wrap_width, ImDrawTextFlags flags /* = 0 */);
+CIMGUI_API const char* cImTextCalcWordWrapNextLineStart(const char* text, const char* text_end, ImDrawTextFlags flags /* = 0 */);  // trim trailing space and find beginning of next line
 
 // Helpers: File System
 #ifdef IMGUI_DISABLE_FILE_FUNCTIONS
@@ -916,7 +932,7 @@ struct ImPool_ImGuiTable_t
 // Maintain a line index for a text buffer. This is a strong candidate to be moved into the public API.
 struct ImGuiTextIndex_t
 {
-    ImVector_int LineOffsets;
+    ImVector_int Offsets;
     int          EndOffset /* = 0 */;  // Because we don't own text buffer we need to maintain EndOffset (may bake in LineOffsets?)
 };
 typedef struct ImGuiTextIndex_t ImGuiTextIndex;  // Maintain a line index for a text buffer.
@@ -1038,7 +1054,6 @@ typedef enum
 {
     // NB: need to be in sync with last value of ImGuiSelectableFlags_
     ImGuiSelectableFlags_NoHoldingActiveID    = 1<<20,
-    ImGuiSelectableFlags_SelectOnNav          = 1<<21,  // (WIP) Auto-select when moved into. This is not exposed in public API as to handle multi-select and modifiers we will need user to explicitly control focus scope. May be replaced with a BeginSelection() API.
     ImGuiSelectableFlags_SelectOnClick        = 1<<22,  // Override button behavior to react on Click (default is Click+Release)
     ImGuiSelectableFlags_SelectOnRelease      = 1<<23,  // Override button behavior to react on Release (default is Click+Release)
     ImGuiSelectableFlags_SpanAvailWidth       = 1<<24,  // Span all avail width even if we declared less for layout purpose. FIXME: We may be able to remove this (added in 6251d379, 2bcafc86 for menus)
@@ -1199,35 +1214,40 @@ struct ImGuiInputTextState_t
     ImVector_char       CallbackTextBackup;    // temporary storage for callback to support automatic reconcile of undo-stack
     int                 BufCapacity;           // end-user buffer capacity (include zero terminator)
     ImVec2              Scroll;                // horizontal offset (managed manually) + vertical scrolling (pulled from child window's own Scroll.y)
+    int                 LineCount;             // last line count (solely for debugging)
+    float               WrapWidth;             // word-wrapping width
     float               CursorAnim;            // timer for cursor blink, reset on every user action so the cursor reappears immediately
     bool                CursorFollow;          // set when we want scrolling to follow the current cursor position (not always!)
+    bool                CursorCenterY;         // set when we want scrolling to be centered over the cursor position (while resizing a word-wrapping field)
     bool                SelectedAllMouseLock;  // after a double-click to select all, we ignore further mouse drags to update selection
     bool                Edited;                // edited this frame
     bool                WantReloadUserBuf;     // force a reload of user buf so it may be modified externally. may be automatic in future version.
+    ImS8                LastMoveDirectionLR;   // ImGuiDir_Left or ImGuiDir_Right. track last movement direction so when cursor cross over a word-wrapping boundaries we can display it on either line depending on last move.s
     int                 ReloadSelectionStart;
     int                 ReloadSelectionEnd;
 };
-CIMGUI_API void ImGuiInputTextState_ClearText(ImGuiInputTextState* self);
-CIMGUI_API void ImGuiInputTextState_ClearFreeMemory(ImGuiInputTextState* self);
-CIMGUI_API void ImGuiInputTextState_OnKeyPressed(ImGuiInputTextState* self, int key);          // Cannot be inline because we call in code in stb_textedit.h implementation
-CIMGUI_API void ImGuiInputTextState_OnCharPressed(ImGuiInputTextState* self, unsigned int c);
+CIMGUI_API void  ImGuiInputTextState_ClearText(ImGuiInputTextState* self);
+CIMGUI_API void  ImGuiInputTextState_ClearFreeMemory(ImGuiInputTextState* self);
+CIMGUI_API void  ImGuiInputTextState_OnKeyPressed(ImGuiInputTextState* self, int key);          // Cannot be inline because we call in code in stb_textedit.h implementation
+CIMGUI_API void  ImGuiInputTextState_OnCharPressed(ImGuiInputTextState* self, unsigned int c);
+CIMGUI_API float ImGuiInputTextState_GetPreferredOffsetX(const ImGuiInputTextState* self);
 // Cursor & Selection
-CIMGUI_API void ImGuiInputTextState_CursorAnimReset(ImGuiInputTextState* self);
-CIMGUI_API void ImGuiInputTextState_CursorClamp(ImGuiInputTextState* self);
-CIMGUI_API bool ImGuiInputTextState_HasSelection(const ImGuiInputTextState* self);
-CIMGUI_API void ImGuiInputTextState_ClearSelection(ImGuiInputTextState* self);
-CIMGUI_API int  ImGuiInputTextState_GetCursorPos(const ImGuiInputTextState* self);
-CIMGUI_API int  ImGuiInputTextState_GetSelectionStart(const ImGuiInputTextState* self);
-CIMGUI_API int  ImGuiInputTextState_GetSelectionEnd(const ImGuiInputTextState* self);
-CIMGUI_API void ImGuiInputTextState_SelectAll(ImGuiInputTextState* self);
+CIMGUI_API void  ImGuiInputTextState_CursorAnimReset(ImGuiInputTextState* self);
+CIMGUI_API void  ImGuiInputTextState_CursorClamp(ImGuiInputTextState* self);
+CIMGUI_API bool  ImGuiInputTextState_HasSelection(const ImGuiInputTextState* self);
+CIMGUI_API void  ImGuiInputTextState_ClearSelection(ImGuiInputTextState* self);
+CIMGUI_API int   ImGuiInputTextState_GetCursorPos(const ImGuiInputTextState* self);
+CIMGUI_API int   ImGuiInputTextState_GetSelectionStart(const ImGuiInputTextState* self);
+CIMGUI_API int   ImGuiInputTextState_GetSelectionEnd(const ImGuiInputTextState* self);
+CIMGUI_API void  ImGuiInputTextState_SelectAll(ImGuiInputTextState* self);
 // Reload user buf (WIP #2890)
 // If you modify underlying user-passed const char* while active you need to call this (InputText V2 may lift this)
 //   strcpy(my_buf, "hello");
 //   if (ImGuiInputTextState* state = ImGui::GetInputTextState(id)) // id may be ImGui::GetItemID() is last item
 //       state->ReloadUserBufAndSelectAll();
-CIMGUI_API void ImGuiInputTextState_ReloadUserBufAndSelectAll(ImGuiInputTextState* self);
-CIMGUI_API void ImGuiInputTextState_ReloadUserBufAndKeepSelection(ImGuiInputTextState* self);
-CIMGUI_API void ImGuiInputTextState_ReloadUserBufAndMoveToEnd(ImGuiInputTextState* self);
+CIMGUI_API void  ImGuiInputTextState_ReloadUserBufAndSelectAll(ImGuiInputTextState* self);
+CIMGUI_API void  ImGuiInputTextState_ReloadUserBufAndKeepSelection(ImGuiInputTextState* self);
+CIMGUI_API void  ImGuiInputTextState_ReloadUserBufAndMoveToEnd(ImGuiInputTextState* self);
 
 typedef enum
 {
@@ -1523,8 +1543,8 @@ struct ImGuiKeyRoutingData_t
 {
     ImGuiKeyRoutingIndex NextEntryIndex;
     ImU16                Mods;              // Technically we'd only need 4-bits but for simplify we store ImGuiMod_ values which need 16-bits.
-    ImU8                 RoutingCurrScore;  // [DEBUG] For debug display
-    ImU8                 RoutingNextScore;  // Lower is better (0: perfect score)
+    ImU16                RoutingCurrScore;  // [DEBUG] For debug display
+    ImU16                RoutingNextScore;  // Lower is better (0: perfect score)
     ImGuiID              RoutingCurr;
     ImGuiID              RoutingNext;
 };
@@ -1628,8 +1648,9 @@ typedef enum
     ImGuiActivateFlags_PreferInput        = 1<<0,  // Favor activation that requires keyboard text input (e.g. for Slider/Drag). Default for Enter key.
     ImGuiActivateFlags_PreferTweak        = 1<<1,  // Favor activation for tweaking with arrows or gamepad (e.g. for Slider/Drag). Default for Space key and if keyboard is not used.
     ImGuiActivateFlags_TryToPreserveState = 1<<2,  // Request widget to preserve state if it can (e.g. InputText will try to preserve cursor/selection)
-    ImGuiActivateFlags_FromTabbing        = 1<<3,  // Activation requested by a tabbing request
+    ImGuiActivateFlags_FromTabbing        = 1<<3,  // Activation requested by a tabbing request (ImGuiNavMoveFlags_IsTabbing)
     ImGuiActivateFlags_FromShortcut       = 1<<4,  // Activation requested by an item shortcut via SetNextItemShortcut() function.
+    ImGuiActivateFlags_FromFocusApi       = 1<<5,  // Activation requested by an api request (ImGuiNavMoveFlags_FocusApi)
 } ImGuiActivateFlags_;
 
 // Early work-in-progress API for ScrollToItem()
@@ -2041,23 +2062,26 @@ struct ImGuiMetricsConfig_t
 
 struct ImGuiStackLevelInfo_t
 {
-    ImGuiID       ID;
-    ImS8          QueryFrameCount;  // >= 1: Query in progress
-    bool          QuerySuccess;     // Obtained result from DebugHookIdInfo()
-    ImGuiDataType DataType : 8;
-    char          Desc[57];         // Arbitrarily sized buffer to hold a result (FIXME: could replace Results[] with a chunk stream?) FIXME: Now that we added CTRL+C this should be fixed.
+    ImGuiID ID;
+    ImS8    QueryFrameCount;  // >= 1: Query in progress
+    bool    QuerySuccess;     // Obtained result from DebugHookIdInfo()
+    ImS8    DataType;         // ImGuiDataType
+    int     DescOffset;       // -1 or offset into parent's ResultPathsBuf
 };
 
 // State for ID Stack tool queries
 struct ImGuiIDStackTool_t
 {
     int                          LastActiveFrame;
-    int                          StackLevel;  // -1: query stack and resize Results, >= 0: individual stack level
-    ImGuiID                      QueryId;     // ID to query details for
+    int                          StackLevel;       // -1: query stack and resize Results, >= 0: individual stack level
+    ImGuiID                      QueryMainId;      // ID to query details for
     ImVector_ImGuiStackLevelInfo Results;
-    bool                         CopyToClipboardOnCtrlC;
+    bool                         QueryHookActive;  // Used to disambiguate the case where DebugHookIdInfoId == 0 which is valid.
+    bool                         OptHexEncodeNonAsciiChars;
+    bool                         OptCopyToClipboardOnCtrlC;
     float                        CopyToClipboardLastTime;
-    ImGuiTextBuffer              ResultPathBuf;
+    ImGuiTextBuffer              ResultPathsBuf;
+    ImGuiTextBuffer              ResultTempBuf;
 };
 
 //-----------------------------------------------------------------------------
@@ -2147,7 +2171,7 @@ struct ImGuiContext_t
 
     // Item/widgets state and tracking information
     ImGuiID                        DebugDrawIdConflictsId;              // Set when we detect multiple items with the same identifier
-    ImGuiID                        DebugHookIdInfo;                     // Will call core hooks: DebugHookIdInfo() from GetID functions, used by ID Stack Tool [next HoveredId/ActiveId to not pull in an extra cache-line]
+    ImGuiID                        DebugHookIdInfoId;                   // Will call core hooks: DebugHookIdInfo() from GetID functions, used by ID Stack Tool [next HoveredId/ActiveId to not pull in an extra cache-line]
     ImGuiID                        HoveredId;                           // Hovered widget, filled during the frame
     ImGuiID                        HoveredIdPreviousFrame;
     int                            HoveredIdPreviousFrameItemCount;     // Count numbers of items using the same ID as last frame's hovered id
@@ -2236,7 +2260,7 @@ struct ImGuiContext_t
     float                          NavHighlightActivatedTimer;
     ImGuiID                        NavNextActivateId;                   // Set by ActivateItemByID(), queued until next frame.
     ImGuiActivateFlags             NavNextActivateFlags;
-    ImGuiInputSource               NavInputSource;                      // Keyboard or Gamepad mode? THIS CAN ONLY BE ImGuiInputSource_Keyboard or ImGuiInputSource_Mouse
+    ImGuiInputSource               NavInputSource;                      // Keyboard or Gamepad mode? THIS CAN ONLY BE ImGuiInputSource_Keyboard or ImGuiInputSource_Gamepad
     ImGuiSelectionUserData         NavLastValidSelectionUserData;       // Last valid data passed to SetNextItemSelectionUser(), or -1. For current window. Not reset when focusing an item that doesn't have selection data.
     ImS8                           NavCursorHideFrames;
     //ImGuiID               NavActivateInputId;                 // Removed in 1.89.4 (July 2023). This is now part of g.NavActivateId and sets g.NavActivateFlags |= ImGuiActivateFlags_PreferInput. See commit c9a53aa74, issue #5606.
@@ -2302,6 +2326,7 @@ struct ImGuiContext_t
     ImRect                         DragDropTargetRect;                  // Store rectangle of current target candidate (we favor small targets when overlapping)
     ImRect                         DragDropTargetClipRect;              // Store ClipRect at the time of item's drawing
     ImGuiID                        DragDropTargetId;
+    ImGuiID                        DragDropTargetFullViewport;
     ImGuiDragDropFlags             DragDropAcceptFlags;
     float                          DragDropAcceptIdCurrRectSurface;     // Target item surface (we resolve overlapping targets by prioritizing the smaller surface)
     ImGuiID                        DragDropAcceptIdCurr;                // Target item id (set at the time of accepting the payload)
@@ -2352,6 +2377,7 @@ struct ImGuiContext_t
 
     // Widget state
     ImGuiInputTextState            InputTextState;
+    ImGuiTextIndex                 InputTextLineIndex;                  // Temporary storage
     ImGuiInputTextDeactivatedState InputTextDeactivatedState;
     ImFontBaked                    InputTextPasswordFontBackupBaked;
     ImFontFlags                    InputTextPasswordFontBackupFlags;
@@ -2412,7 +2438,7 @@ struct ImGuiContext_t
     ImGuiWindow*                   LogWindow;
     ImFileHandle                   LogFile;                             // If != NULL log to stdout/ file
     ImGuiTextBuffer                LogBuffer;                           // Accumulation buffer when log to clipboard. This is pointer so our GImGui static constructor doesn't call heap allocators.
-    const char*                    LogNextPrefix;
+    const char*                    LogNextPrefix;                       // See comment in LogSetNextTextDecoration(): doesn't copy underlying data, use carefully!
     const char*                    LogNextSuffix;
     float                          LogLinePosY;
     bool                           LogLineFirstItem;
@@ -3137,6 +3163,7 @@ CIMGUI_API ImVec2 igCalcItemSize(ImVec2 size, float default_w, float default_h);
 CIMGUI_API float  igCalcWrapWidthForPos(ImVec2 pos, float wrap_pos_x);
 CIMGUI_API void   igPushMultiItemsWidths(int components, float width_full);
 CIMGUI_API void   igShrinkWidths(ImGuiShrinkWidthItem* items, int count, float width_excess, float width_min);
+CIMGUI_API void   igCalcClipRectVisibleItemsY(ImRect clip_rect, ImVec2 pos, float items_height, int* out_visible_start, int* out_visible_end);
 
 // Parameter stacks (shared)
 CIMGUI_API const ImGuiStyleVarInfo* igGetStyleVarInfo(ImGuiStyleVar idx);
@@ -3308,9 +3335,12 @@ CIMGUI_API ImGuiID igGetCurrentFocusScope(void);      // Focus scope we are outp
 // Drag and Drop
 CIMGUI_API bool igIsDragDropActive(void);
 CIMGUI_API bool igBeginDragDropTargetCustom(ImRect bb, ImGuiID id);
+CIMGUI_API bool igBeginDragDropTargetViewport(ImGuiViewport* viewport);                                         // Implied p_bb = NULL
+CIMGUI_API bool igBeginDragDropTargetViewportEx(ImGuiViewport* viewport, const ImRect* p_bb /* = NULL */);
 CIMGUI_API void igClearDragDrop(void);
 CIMGUI_API bool igIsDragDropPayloadBeingAccepted(void);
-CIMGUI_API void igRenderDragDropTargetRect(ImRect bb, ImRect item_clip_rect);
+CIMGUI_API void igRenderDragDropTargetRectForItem(ImRect bb);
+CIMGUI_API void igRenderDragDropTargetRectEx(ImDrawList* draw_list, ImRect bb);
 
 // Typing-Select API
 // (provide Windows Explorer style "select items by typing partial name" + "cycle through items by typing same letter" feature)
@@ -3408,6 +3438,8 @@ CIMGUI_API ImGuiTableSettings* igTableSettingsFindByID(ImGuiID id);
 
 // Tab Bars
 CIMGUI_API ImGuiTabBar*  igGetCurrentTabBar(void);
+CIMGUI_API ImGuiTabBar*  igTabBarFindByID(ImGuiID id);
+CIMGUI_API void          igTabBarRemove(ImGuiTabBar* tab_bar);
 CIMGUI_API bool          igBeginTabBarEx(ImGuiTabBar* tab_bar, ImRect bb, ImGuiTabBarFlags flags);
 CIMGUI_API ImGuiTabItem* igTabBarFindTabByID(ImGuiTabBar* tab_bar, ImGuiID tab_id);
 CIMGUI_API ImGuiTabItem* igTabBarFindTabByOrder(ImGuiTabBar* tab_bar, int order);
@@ -3635,11 +3667,11 @@ typedef ImFontLoader ImFontBuilderIO;  // [renamed/changed in 1.92] The types ar
 #define IMGUI_FONT_SIZE_THRESHOLD_FOR_LOADADVANCEXONLYMODE      (128.0f)
 
 // Refer to ImFontAtlasPackGetRect() to better understand how this works.
-#define ImFontAtlasRectId_IndexMask_        (0x000FFFFF)                              // 20-bits: index to access builder->RectsIndex[].
+#define ImFontAtlasRectId_IndexMask_        (0x0007FFFF)                              // 20-bits signed: index to access builder->RectsIndex[].
 #define ImFontAtlasRectId_GenerationMask_   (0x3FF00000)                              // 10-bits: entry generation, so each ID is unique and get can safely detected old identifiers.
 #define ImFontAtlasRectId_GenerationShift_  (20)
 CIMGUI_API int               cImFontAtlasRectId_GetIndex(ImFontAtlasRectId id);
-CIMGUI_API int               cImFontAtlasRectId_GetGeneration(ImFontAtlasRectId id);
+CIMGUI_API unsigned int      cImFontAtlasRectId_GetGeneration(ImFontAtlasRectId id);
 CIMGUI_API ImFontAtlasRectId cImFontAtlasRectId_Make(int index_idx, int gen_idx);
 
 // Packed rectangle lookup entry (we need an indirection to allow removing/reordering rectangles)
@@ -3650,7 +3682,7 @@ CIMGUI_API ImFontAtlasRectId cImFontAtlasRectId_Make(int index_idx, int gen_idx)
 struct ImFontAtlasRectEntry_t
 {
     int          TargetIndex : 20;  // When Used: ImFontAtlasRectId -> into Rects[]. When unused: index to next unused RectsIndex[] slot to consume free-list.
-    int          Generation : 10;   // Increased each time the entry is reused for a new rectangle.
+    unsigned int Generation : 10;   // Increased each time the entry is reused for a new rectangle.
     unsigned int IsUsed : 1;
 };
 struct ImVector_ImFontAtlasRectEntry_t { int Size; int Capacity; ImFontAtlasRectEntry* Data; };  // Instantiation of ImVector<ImFontAtlasRectEntry>
@@ -3801,7 +3833,7 @@ CIMGUI_API const char* cImGuiTestEngine_FindItemDebugLabel(ImGuiContext* ctx, Im
 #define IMGUI_TEST_ENGINE_ITEM_INFO(_ID,_LABEL,_FLAGS)      if (g.TestEngineHookItems) ImGuiTestEngineHook_ItemInfo(&g, _ID, _LABEL, _FLAGS)     // Register item label and status flags (optional)
 #define IMGUI_TEST_ENGINE_LOG(_FMT,...)                     ImGuiTestEngineHook_Log(&g, _FMT, __VA_ARGS__)                                       // Custom log entry from user land into test log
 #else
-#define IMGUI_TEST_ENGINE_ITEM_ADD(_BB,_ID)                 ((void)0)
+#define IMGUI_TEST_ENGINE_ITEM_ADD(_ID,_BB,_ITEM_DATA)      ((void)0)
 #define IMGUI_TEST_ENGINE_ITEM_INFO(_ID,_LABEL,_FLAGS)      ((void)g)
 #endif // #ifdef IMGUI_ENABLE_TEST_ENGINE
 //-----------------------------------------------------------------------------
