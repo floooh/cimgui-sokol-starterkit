@@ -5,7 +5,7 @@
 #include "sokol_gfx.h"
 #include "sokol_log.h"
 #include "sokol_glue.h"
-#include "cimgui.h"
+#include "imgui.h"
 #include "sokol_imgui.h"
 
 static struct {
@@ -13,11 +13,10 @@ static struct {
 } state;
 
 static void init(void) {
-    sg_setup(&(sg_desc){
-        .environment = sglue_environment(),
-        .logger.func = slog_func,
-    });
-    simgui_setup(&(simgui_desc_t){ 0 });
+    const sg_desc sgdesc = { .environment = sglue_environment(), .logger = { .func = slog_func } };
+    sg_setup(sgdesc);
+    const simgui_desc_t sidesc = { .logger = { .func = slog_func } };
+    simgui_setup(sidesc);
 
     // initial clear color
     state.pass_action = (sg_pass_action) {
@@ -26,22 +25,24 @@ static void init(void) {
 }
 
 static void frame(void) {
-    simgui_new_frame(&(simgui_frame_desc_t){
+    const simgui_frame_desc_t frame_desc = {
         .width = sapp_width(),
         .height = sapp_height(),
         .delta_time = sapp_frame_duration(),
         .dpi_scale = sapp_dpi_scale(),
-    });
+    };
+    simgui_new_frame(frame_desc);
 
     /*=== UI CODE STARTS HERE ===*/
-    igSetNextWindowPos((ImVec2){10,10}, ImGuiCond_Once);
-    igSetNextWindowSize((ImVec2){400, 100}, ImGuiCond_Once);
-    igBegin("Hello Dear ImGui!", 0, ImGuiWindowFlags_None);
-    igColorEdit3("Background", &state.pass_action.colors[0].clear_value.r, ImGuiColorEditFlags_None);
-    igEnd();
+    ImGui::SetNextWindowPos({10,10}, ImGuiCond_Once);
+    ImGui::SetNextWindowSize((ImVec2){400, 100}, ImGuiCond_Once);
+    ImGui::Begin("Hello Dear ImGui!", 0, ImGuiWindowFlags_None);
+    ImGui::ColorEdit3("Background", &state.pass_action.colors[0].clear_value.r, ImGuiColorEditFlags_None);
+    ImGui::End();
     /*=== UI CODE ENDS HERE ===*/
 
-    sg_begin_pass(&(sg_pass){ .action = state.pass_action, .swapchain = sglue_swapchain() });
+    const sg_pass pass = { .action = state.pass_action, .swapchain = sglue_swapchain() };
+    sg_begin_pass(pass);
     simgui_render();
     sg_end_pass();
     sg_commit();
@@ -59,7 +60,7 @@ static void event(const sapp_event* ev) {
 sapp_desc sokol_main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
-    return (sapp_desc){
+    return {
         .init_cb = init,
         .frame_cb = frame,
         .cleanup_cb = cleanup,

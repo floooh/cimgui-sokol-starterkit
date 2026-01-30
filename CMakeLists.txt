@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(cimgui-sokol-starterkit)
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
 # Linux -pthread shenanigans
 if (CMAKE_SYSTEM_NAME STREQUAL Linux)
     set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -28,8 +28,8 @@ set(SOKOL_HEADERS
     sokol/sokol_imgui.h
     sokol/sokol_glue.h)
 if(CMAKE_SYSTEM_NAME STREQUAL Darwin)
-    add_library(sokol STATIC sokol/sokol.c ${SOKOL_HEADERS})
-    target_compile_options(sokol PRIVATE -x objective-c)
+    add_library(sokol STATIC sokol/sokol.cc ${SOKOL_HEADERS})
+    target_compile_options(sokol PRIVATE -x objective-c++)
     target_link_libraries(sokol PUBLIC
         "-framework QuartzCore"
         "-framework Cocoa"
@@ -47,10 +47,10 @@ target_include_directories(sokol INTERFACE sokol)
 
 #=== EXECUTABLE: demo
 if(CMAKE_SYSTEM_NAME STREQUAL Windows)
-    add_executable(demo WIN32 demo.c)
+    add_executable(demo WIN32 demo.cc)
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT demo)
 else()
-    add_executable(demo demo.c)
+    add_executable(demo demo.cc)
 endif()
 target_link_libraries(demo sokol)
 
