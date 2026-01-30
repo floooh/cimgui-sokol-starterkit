@@ -419,9 +419,14 @@ CIMGUI_API int         cimgui::cImTextCountUtf8BytesFromStr(const ImWchar* in_te
     return ::ImTextCountUtf8BytesFromStr(in_text, in_text_end);
 }
 
-CIMGUI_API const char* cimgui::cImTextFindPreviousUtf8Codepoint(const char* in_text_start, const char* in_text_curr)
+CIMGUI_API const char* cimgui::cImTextFindPreviousUtf8Codepoint(const char* in_text_start, const char* in_p)
 {
-    return ::ImTextFindPreviousUtf8Codepoint(in_text_start, in_text_curr);
+    return ::ImTextFindPreviousUtf8Codepoint(in_text_start, in_p);
+}
+
+CIMGUI_API const char* cimgui::cImTextFindValidUtf8CodepointEnd(const char* in_text_start, const char* in_text_end, const char* in_p)
+{
+    return ::ImTextFindValidUtf8CodepointEnd(in_text_start, in_text_end, in_p);
 }
 
 CIMGUI_API int         cimgui::cImTextCountLines(const char* in_text, const char* in_text_end)
@@ -1272,6 +1277,11 @@ CIMGUI_API cimgui::ImVec2   cimgui::igCalcWindowNextAutoFitSize(cimgui::ImGuiWin
 CIMGUI_API bool             cimgui::igIsWindowChildOf(cimgui::ImGuiWindow* window, cimgui::ImGuiWindow* potential_parent, bool popup_hierarchy)
 {
     return ::ImGui::IsWindowChildOf(reinterpret_cast<::ImGuiWindow*>(window), reinterpret_cast<::ImGuiWindow*>(potential_parent), popup_hierarchy);
+}
+
+CIMGUI_API bool             cimgui::igIsWindowInBeginStack(cimgui::ImGuiWindow* window)
+{
+    return ::ImGui::IsWindowInBeginStack(reinterpret_cast<::ImGuiWindow*>(window));
 }
 
 CIMGUI_API bool             cimgui::igIsWindowWithinBeginStackOf(cimgui::ImGuiWindow* window, cimgui::ImGuiWindow* potential_parent)
@@ -3543,6 +3553,11 @@ CIMGUI_API void cimgui::cImFontAtlasBuildMain(cimgui::ImFontAtlas* atlas)
 CIMGUI_API void cimgui::cImFontAtlasBuildSetupFontLoader(cimgui::ImFontAtlas* atlas, const cimgui::ImFontLoader* font_loader)
 {
     ::ImFontAtlasBuildSetupFontLoader(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<const ::ImFontLoader*>(font_loader));
+}
+
+CIMGUI_API void cimgui::cImFontAtlasBuildNotifySetFont(cimgui::ImFontAtlas* atlas, cimgui::ImFont* old_font, cimgui::ImFont* new_font)
+{
+    ::ImFontAtlasBuildNotifySetFont(reinterpret_cast<::ImFontAtlas*>(atlas), reinterpret_cast<::ImFont*>(old_font), reinterpret_cast<::ImFont*>(new_font));
 }
 
 CIMGUI_API void cimgui::cImFontAtlasBuildUpdatePointers(cimgui::ImFontAtlas* atlas)

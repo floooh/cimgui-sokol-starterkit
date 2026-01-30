@@ -23,6 +23,7 @@
         #define SOKOL_D3D11
         #define SOKOL_METAL
         #define SOKOL_WGPU
+        #define SOKOL_VULKAN
         #define SOKOL_NOAPI
 
     Optionally provide the following defines with your own implementations:
@@ -79,11 +80,17 @@
         - with SOKOL_GLCORE: GL
         - with SOKOL_GLES3: GLESv2
         - with SOKOL_WGPU: a WebGPU implementation library (tested with webgpu_dawn)
+        - with SOKOL_VULKAN: vulkan
         - with EGL: EGL
     - on Android: GLESv3, EGL, log, android
     - on Windows:
         - with MSVC or Clang: library dependencies are defined via `#pragma comment`
         - with SOKOL_WGPU: a WebGPU implementation library (tested with webgpu_dawn)
+        - with SOKOL_VULKAN:
+            - install the Vulkan SDK
+            - set a header search path to $VULKAN_SDK/Include
+            - set a library search path to $VULKAN_SDK/Lib
+            - link with vulkan-1.lib
         - with MINGW/MSYS2 gcc:
             - compile with '-mwin32' so that _WIN32 is defined
             - link with the following libs: -lkernel32 -luser32 -lshell32
@@ -92,6 +99,11 @@
 
     On Linux, you also need to use the -pthread compiler and linker option, otherwise weird
     things will happen, see here for details: https://github.com/floooh/sokol/issues/376
+
+    For Linux+Vulkan install the following packages (or equivalents):
+        - libvulkan-dev
+        - vulkan-validationlayers
+        - vulkan-tools
 
     On macOS and iOS, the implementation must be compiled as Objective-C.
 
@@ -840,7 +852,7 @@
         sapp_html5_ask_leave_site(bool ask);
 
     The initial state of the associated internal flag can be provided
-    at startup via sapp_desc.html5_ask_leave_site.
+    at startup via sapp_desc.html5.ask_leave_site.
 
     This feature should only be used sparingly in critical situations - for
     instance when the user would loose data - since popping up modal dialog
@@ -1039,11 +1051,13 @@
         sapp_desc sokol_main(int argc, char* argv[]) {
             return (sapp_desc){
                 //...
-                .html5_bubble_mouse_events = true,
-                .html5_bubble_touch_events = true,
-                .html5_bubble_wheel_events = true,
-                .html5_bubble_key_events = true,
-                .html5_bubble_char_events = true,
+                .html5 = {
+                    .bubble_mouse_events = true,
+                    .bubble_touch_events = true,
+                    .bubble_wheel_events = true,
+                    .bubble_key_events = true,
+                    .bubble_char_events = true,
+                }
             };
         }
 
@@ -1074,15 +1088,15 @@
     is '#canvas'.
 
     If you name your canvas differently, you need to communicate that name to
-    sokol_app.h via `sapp_desc.html5_canvas_selector` as a regular css selector
+    sokol_app.h via `sapp_desc.html5.canvas_selector` as a regular css selector
     string that's compatible with `document.querySelector()`. E.g. if your canvas
     object looks like this:
 
         <canvas id="bla" ...></canvas>
 
-    The `sapp_desc.html5_canvas_selector` string must be set to '#bla':
+    The `sapp_desc.html5.canvas_selector` string must be set to '#bla':
 
-        .html5_canvas_selector = "#bla"
+        .html5.canvas_selector = "#bla"
 
     If the canvas object cannot be looked up via `document.querySelector()` you
     need to use one of the alternative methods, both involve the special
@@ -1127,7 +1141,7 @@
     In that case, pass the same string to sokol_app.h which is used as key
     in the specialHTMLTargets[] map:
 
-        .html5_canvas_selector = "my_canvas"
+        .html5.canvas_selector = "my_canvas"
 
     If sokol_app.h can't find your canvas for some reason check for warning
     messages on the browser console.
@@ -1187,11 +1201,11 @@
     To help with these issues, sokol_app.h can be configured at startup
     via the following Windows-specific sapp_desc flags:
 
-        sapp_desc.win32_console_utf8 (default: false)
+        sapp_desc.win32.console_utf8 (default: false)
             When set to true, the output console codepage will be switched
             to UTF-8 (and restored to the original codepage on exit)
 
-        sapp_desc.win32_console_attach (default: false)
+        sapp_desc.win32.console_attach (default: false)
             When set to true, stdout and stderr will be attached to the
             console of the parent process (if the parent process actually
             has a console). This means that if the application was started
@@ -1200,13 +1214,13 @@
             the application is started via double-click, it will behave like
             a regular UI application, and stdout/stderr will not be visible.
 
-        sapp_desc.win32_console_create (default: false)
+        sapp_desc.win32.console_create (default: false)
             When set to true, a new console window will be created and
             stdout/stderr will be redirected to that console window. It
             doesn't matter if the application is started from the command
             line or via double-click.
 
-            NOTE: setting both win32_console_attach and win32_console_create
+            NOTE: setting both win32.console_attach and win32.console_create
             to true also makes sense and has the effect that output
             will appear in the existing terminal when started from the cmdline, and
             otherwise (when started via double-click) will open a console window.
@@ -1797,6 +1811,7 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(WGPU_REQUEST_ADAPTER_STATUS_ERROR, "wgpu: requesting adapter failed with status 'error'") \
     _SAPP_LOGITEM_XMACRO(WGPU_REQUEST_ADAPTER_STATUS_UNKNOWN, "wgpu: requesting adapter failed with status 'unknown'") \
     _SAPP_LOGITEM_XMACRO(WGPU_CREATE_INSTANCE_FAILED, "wgpu: failed to create instance") \
+    _SAPP_LOGITEM_XMACRO(VULKAN_REQUIRED_INSTANCE_EXTENSION_FUNCTION_MISSING, "vulkan: could not lookup a required instance extension function pointer") \
     _SAPP_LOGITEM_XMACRO(VULKAN_ALLOC_DEVICE_MEMORY_NO_SUITABLE_MEMORY_TYPE, "vulkan: could not find suitable memory type") \
     _SAPP_LOGITEM_XMACRO(VULKAN_ALLOCATE_MEMORY_FAILED, "vulkan: vkAllocateMemory() failed!") \
     _SAPP_LOGITEM_XMACRO(VULKAN_CREATE_INSTANCE_FAILED, "vulkan: vkCreateInstance failed") \
@@ -1878,6 +1893,7 @@ typedef struct sapp_wgpu_environment {
 } sapp_wgpu_environment;
 
 typedef struct sapp_vulkan_environment {
+    const void* instance;
     const void* physical_device;
     const void* device;
     const void* queue;
@@ -2305,8 +2321,12 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #elif defined(_WIN32)
     // Windows (D3D11 or GL)
     #define _SAPP_WIN32 (1)
-    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_NOAPI)
-    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU or SOKOL_NOAPI")
+    #if !defined(SOKOL_D3D11) && !defined(SOKOL_GLCORE) && !defined(SOKOL_WGPU) && !defined(SOKOL_VULKAN) && !defined(SOKOL_NOAPI)
+    #error("sokol_app.h: unknown 3D API selected for Win32, must be SOKOL_D3D11, SOKOL_GLCORE, SOKOL_WGPU, SOKOL_VULKAN or SOKOL_NOAPI")
+    #endif
+    #if defined(SOKOL_VULKAN)
+    #define VK_USE_PLATFORM_WIN32_KHR
+    #include <vulkan/vulkan.h>
     #endif
 #elif defined(__ANDROID__)
     // Android
@@ -2789,6 +2809,9 @@ typedef struct {
         VkSemaphore render_finished_sem;
         VkSemaphore present_complete_sem;
     } sync[_SAPP_VK_MAX_SWAPCHAIN_IMAGES];
+    struct {
+        PFN_vkSetDebugUtilsObjectNameEXT set_debug_utils_object_name_ext;
+    } ext;
 } _sapp_vk_t;
 #endif
 
@@ -3839,8 +3862,7 @@ _SOKOL_PRIVATE WGPUCallbackMode _sapp_wgpu_callbackmode(void) {
 _SOKOL_PRIVATE void _sapp_wgpu_await(WGPUFuture future) {
     #if defined(_SAPP_WGPU_HAS_WAIT)
         SOKOL_ASSERT(_sapp.wgpu.instance);
-        WGPUFutureWaitInfo wait_info;
-        _sapp_clear(&wait_info, sizeof(wait_info));
+        _SAPP_STRUCT(WGPUFutureWaitInfo, wait_info);
         wait_info.future = future;
         WGPUWaitStatus res = wgpuInstanceWaitAny(_sapp.wgpu.instance, 1, &wait_info, UINT64_MAX);
         SOKOL_ASSERT(res == WGPUWaitStatus_Success); _SOKOL_UNUSED(res);
@@ -3877,30 +3899,25 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
 
     if (!called_from_resize) {
         SOKOL_ASSERT(0 == _sapp.wgpu.surface);
-        WGPUSurfaceDescriptor surf_desc;
-        _sapp_clear(&surf_desc, sizeof(surf_desc));
+        _SAPP_STRUCT(WGPUSurfaceDescriptor, surf_desc);
         #if defined (_SAPP_EMSCRIPTEN)
-            WGPUEmscriptenSurfaceSourceCanvasHTMLSelector html_canvas_desc;
-            _sapp_clear(&html_canvas_desc, sizeof(html_canvas_desc));
+            _SAPP_STRUCT(WGPUEmscriptenSurfaceSourceCanvasHTMLSelector, html_canvas_desc);
             html_canvas_desc.chain.sType = WGPUSType_EmscriptenSurfaceSourceCanvasHTMLSelector;
             html_canvas_desc.selector = _sapp_wgpu_stringview(_sapp.html5_canvas_selector);
             surf_desc.nextInChain = &html_canvas_desc.chain;
         #elif defined(_SAPP_MACOS)
-            WGPUSurfaceSourceMetalLayer from_metal_layer;
-            _sapp_clear(&from_metal_layer, sizeof(from_metal_layer));
+            _SAPP_STRUCT(WGPUSurfaceSourceMetalLayer, from_metal_layer);
             from_metal_layer.chain.sType = WGPUSType_SurfaceSourceMetalLayer;
             from_metal_layer.layer = _sapp.macos.view.layer;
             surf_desc.nextInChain = &from_metal_layer.chain;
         #elif defined(_SAPP_WIN32)
-            WGPUSurfaceSourceWindowsHWND from_hwnd;
-            _sapp_clear(&from_hwnd, sizeof(from_hwnd));
+            _SAPP_STRUCT(WGPUSurfaceSourceWindowsHWND, from_hwnd);
             from_hwnd.chain.sType = WGPUSType_SurfaceSourceWindowsHWND;
             from_hwnd.hinstance = GetModuleHandleW(NULL);
             from_hwnd.hwnd = _sapp.win32.hwnd;
             surf_desc.nextInChain = &from_hwnd.chain;
         #elif defined(_SAPP_LINUX)
-            WGPUSurfaceSourceXlibWindow from_xlib;
-            _sapp_clear(&from_xlib, sizeof(from_xlib));
+            _SAPP_STRUCT(WGPUSurfaceSourceXlibWindow, from_xlib);
             from_xlib.chain.sType = WGPUSType_SurfaceSourceXlibWindow;
             from_xlib.display = _sapp.x11.display;
             from_xlib.window = _sapp.x11.window;
@@ -3912,8 +3929,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
         if (0 == _sapp.wgpu.surface) {
             _SAPP_PANIC(WGPU_SWAPCHAIN_CREATE_SURFACE_FAILED);
         }
-        WGPUSurfaceCapabilities surf_caps;
-        _sapp_clear(&surf_caps, sizeof(surf_caps));
+        _SAPP_STRUCT(WGPUSurfaceCapabilities, surf_caps);
         WGPUStatus caps_status = wgpuSurfaceGetCapabilities(_sapp.wgpu.surface, _sapp.wgpu.adapter, &surf_caps);
         if (caps_status != WGPUStatus_Success) {
             _SAPP_PANIC(WGPU_SWAPCHAIN_SURFACE_GET_CAPABILITIES_FAILED);
@@ -3922,8 +3938,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     }
 
     SOKOL_ASSERT(_sapp.wgpu.surface);
-    WGPUSurfaceConfiguration surf_conf;
-    _sapp_clear(&surf_conf, sizeof(surf_conf));
+    _SAPP_STRUCT(WGPUSurfaceConfiguration, surf_conf);
     surf_conf.device = _sapp.wgpu.device;
     surf_conf.format = _sapp.wgpu.render_format;
     surf_conf.usage = WGPUTextureUsage_RenderAttachment;
@@ -3939,8 +3954,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     surf_conf.presentMode = WGPUPresentMode_Fifo;
     wgpuSurfaceConfigure(_sapp.wgpu.surface, &surf_conf);
 
-    WGPUTextureDescriptor ds_desc;
-    _sapp_clear(&ds_desc, sizeof(ds_desc));
+    _SAPP_STRUCT(WGPUTextureDescriptor, ds_desc);
     ds_desc.usage = WGPUTextureUsage_RenderAttachment;
     ds_desc.dimension = WGPUTextureDimension_2D;
     ds_desc.size.width = (uint32_t)_sapp.framebuffer_width;
@@ -3959,8 +3973,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_swapchain(bool called_from_resize) {
     }
 
     if (_sapp.sample_count > 1) {
-        WGPUTextureDescriptor msaa_desc;
-        _sapp_clear(&msaa_desc, sizeof(msaa_desc));
+        _SAPP_STRUCT(WGPUTextureDescriptor, msaa_desc);
         msaa_desc.usage = WGPUTextureUsage_RenderAttachment;
         msaa_desc.dimension = WGPUTextureDimension_2D;
         msaa_desc.size.width = (uint32_t)_sapp.framebuffer_width;
@@ -4007,8 +4020,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_discard_swapchain(bool called_from_resize) {
 
 _SOKOL_PRIVATE void _sapp_wgpu_swapchain_next(void) {
     SOKOL_ASSERT(0 == _sapp.wgpu.swapchain_view);
-    WGPUSurfaceTexture surf_tex;
-    _sapp_clear(&surf_tex, sizeof(surf_tex));
+    _SAPP_STRUCT(WGPUSurfaceTexture, surf_tex);
     wgpuSurfaceGetCurrentTexture(_sapp.wgpu.surface, &surf_tex);
     switch (surf_tex.status) {
         case WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal:
@@ -4099,8 +4111,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_request_device_cb(WGPURequestDeviceStatus status,
     SOKOL_ASSERT(device);
     _sapp.wgpu.device = device;
     #if !defined(_SAPP_EMSCRIPTEN)
-        WGPULoggingCallbackInfo cb_info;
-        _sapp_clear(&cb_info, sizeof(cb_info));
+        _SAPP_STRUCT(WGPULoggingCallbackInfo, cb_info);
         cb_info.callback = _sapp_wgpu_device_logging_cb;
         wgpuDeviceSetLoggingCallback(_sapp.wgpu.device, cb_info);
     #endif
@@ -4111,7 +4122,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_request_device_cb(WGPURequestDeviceStatus status,
 _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
     SOKOL_ASSERT(_sapp.wgpu.adapter);
     size_t cur_feature_index = 1;
-    #define _SAPP_WGPU_MAX_REQUESTED_FEATURES (8)
+    #define _SAPP_WGPU_MAX_REQUESTED_FEATURES (16)
     WGPUFeatureName requiredFeatures[_SAPP_WGPU_MAX_REQUESTED_FEATURES] = {
         WGPUFeatureName_Depth32FloatStencil8,
     };
@@ -4132,6 +4143,10 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
         SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
         requiredFeatures[cur_feature_index++] = WGPUFeatureName_Float32Filterable;
     }
+    if (wgpuAdapterHasFeature(_sapp.wgpu.adapter, WGPUFeatureName_DualSourceBlending)) {
+        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_DualSourceBlending;
+    }
     #undef _SAPP_WGPU_MAX_REQUESTED_FEATURES
 
     WGPULimits adapterLimits = WGPU_LIMITS_INIT;
@@ -4143,13 +4158,11 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
     requiredLimits.maxStorageBuffersPerShaderStage = adapterLimits.maxStorageBuffersPerShaderStage;
     requiredLimits.maxStorageTexturesPerShaderStage = adapterLimits.maxStorageTexturesPerShaderStage;
 
-    WGPURequestDeviceCallbackInfo cb_info;
-    _sapp_clear(&cb_info, sizeof(cb_info));
+    _SAPP_STRUCT(WGPURequestDeviceCallbackInfo, cb_info);
     cb_info.mode = _sapp_wgpu_callbackmode();
     cb_info.callback = _sapp_wgpu_request_device_cb;
 
-    WGPUDeviceDescriptor dev_desc;
-    _sapp_clear(&dev_desc, sizeof(dev_desc));
+    _SAPP_STRUCT(WGPUDeviceDescriptor, dev_desc);
     dev_desc.requiredFeatureCount = cur_feature_index;
     dev_desc.requiredFeatures = requiredFeatures;
     dev_desc.requiredLimits = &requiredLimits;
@@ -4186,8 +4199,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_request_adapter_cb(WGPURequestAdapterStatus statu
 _SOKOL_PRIVATE void _sapp_wgpu_create_adapter(void) {
     SOKOL_ASSERT(_sapp.wgpu.instance);
     // FIXME: power preference?
-    WGPURequestAdapterCallbackInfo cb_info;
-    _sapp_clear(&cb_info, sizeof(cb_info));
+    _SAPP_STRUCT(WGPURequestAdapterCallbackInfo, cb_info);
     cb_info.mode = _sapp_wgpu_callbackmode();
     cb_info.callback = _sapp_wgpu_request_adapter_cb;
     WGPUFuture future = wgpuInstanceRequestAdapter(_sapp.wgpu.instance, 0, cb_info);
@@ -4202,8 +4214,7 @@ _SOKOL_PRIVATE void _sapp_wgpu_init(void) {
     SOKOL_ASSERT(0 == _sapp.wgpu.instance);
     SOKOL_ASSERT(!_sapp.wgpu.init_done);
 
-    WGPUInstanceDescriptor desc;
-    _sapp_clear(&desc, sizeof(desc));
+    _SAPP_STRUCT(WGPUInstanceDescriptor, desc);
     #if defined(_SAPP_WGPU_HAS_WAIT)
         WGPUInstanceFeatureName inst_features[1] = {
             WGPUInstanceFeatureName_TimedWaitAny,
@@ -4272,6 +4283,37 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
 #define _SAPP_VK_MAX_COUNT_AND_ARRAY(num, type, count_name, array_name) uint32_t count_name = num; type array_name[num] = {0}
 #endif
 
+_SOKOL_PRIVATE void _sapp_vk_load_instance_ext_funcs(void) {
+    SOKOL_ASSERT(_sapp.vk.instance);
+    #if defined(SOKOL_DEBUG)
+        _sapp.vk.ext.set_debug_utils_object_name_ext = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(_sapp.vk.instance, "vkSetDebugUtilsObjectNameEXT");
+        if (0 == _sapp.vk.ext.set_debug_utils_object_name_ext) {
+            _SAPP_PANIC(VULKAN_REQUIRED_INSTANCE_EXTENSION_FUNCTION_MISSING);
+        }
+    #endif
+}
+
+_SOKOL_PRIVATE void _sapp_vk_set_object_label(VkObjectType obj_type, uint64_t obj_handle, const char* label) {
+    #if defined(SOKOL_DEBUG)
+        SOKOL_ASSERT(_sapp.vk.device);
+        SOKOL_ASSERT(_sapp.vk.ext.set_debug_utils_object_name_ext);
+        SOKOL_ASSERT(obj_handle);
+        if (label) {
+            _SAPP_STRUCT(VkDebugUtilsObjectNameInfoEXT, name_info);
+            name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+            name_info.objectType = obj_type;
+            name_info.objectHandle = obj_handle,
+            name_info.pObjectName = label;
+            VkResult res = _sapp.vk.ext.set_debug_utils_object_name_ext(_sapp.vk.device, &name_info);
+            SOKOL_ASSERT(res == VK_SUCCESS);
+        }
+    #else
+        _SOKOL_UNUSED(obj_type);
+        _SOKOL_UNUSED(obj_handle);
+        _SOKOL_UNUSED(label);
+    #endif
+}
+
 _SOKOL_PRIVATE int _sapp_vk_mem_find_memory_type_index(uint32_t type_filter, VkMemoryPropertyFlags props) {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     _SAPP_STRUCT(VkPhysicalDeviceMemoryProperties, mem_props);
@@ -4303,8 +4345,13 @@ _SOKOL_PRIVATE void _sapp_vk_create_instance(void) {
 
     _SAPP_VK_ZERO_COUNT_AND_ARRAY(32, const char*, ext_count, ext_names);
     ext_names[ext_count++] = VK_KHR_SURFACE_EXTENSION_NAME;
+    #if defined(SOKOL_DEBUG)
+        ext_names[ext_count++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    #endif
     #if defined(VK_USE_PLATFORM_XLIB_KHR)
         ext_names[ext_count++] = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
+    #elif defined(VK_USE_PLATFORM_WIN32_KHR)
+        ext_names[ext_count++] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
     #endif
     SOKOL_ASSERT(ext_count <= 32);
 
@@ -4472,6 +4519,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     required.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     required.pNext = &vk13_features;
     required.features.samplerAnisotropy = VK_TRUE;
+    required.features.dualSrcBlend = VK_TRUE;
     if (supports.features.textureCompressionBC) {
         required.features.textureCompressionBC = VK_TRUE;
     }
@@ -4531,6 +4579,12 @@ _SOKOL_PRIVATE void _sapp_vk_create_surface(void) {
         xlib_info.dpy = _sapp.x11.display;
         xlib_info.window = _sapp.x11.window;
         res = vkCreateXlibSurfaceKHR(_sapp.vk.instance, &xlib_info, 0, &_sapp.vk.surface);
+    #elif defined(_SAPP_WIN32)
+        _SAPP_STRUCT(VkWin32SurfaceCreateInfoKHR, win32_info);
+        win32_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+        win32_info.hinstance = GetModuleHandleW(NULL);
+        win32_info.hwnd = _sapp.win32.hwnd;
+        res = vkCreateWin32SurfaceKHR(_sapp.vk.instance, &win32_info, 0, &_sapp.vk.surface);
     #else
     #error "sokol_app.h: unsupported Vulkan platform"
     #endif
@@ -4578,8 +4632,10 @@ _SOKOL_PRIVATE void _sapp_vk_create_sync_objects(void) {
         SOKOL_ASSERT(0 == _sapp.vk.sync[i].render_finished_sem);
         res = vkCreateSemaphore(_sapp.vk.device, &create_info, 0, &_sapp.vk.sync[i].present_complete_sem);
         SOKOL_ASSERT((res == VK_SUCCESS) && (_sapp.vk.sync[i].present_complete_sem));
+        _sapp_vk_set_object_label(VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)_sapp.vk.sync[i].present_complete_sem, "present_complete_sem");
         res = vkCreateSemaphore(_sapp.vk.device, &create_info, 0, &_sapp.vk.sync[i].render_finished_sem);
         SOKOL_ASSERT((res == VK_SUCCESS) && (_sapp.vk.sync[i].render_finished_sem));
+        _sapp_vk_set_object_label(VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)_sapp.vk.sync[i].render_finished_sem, "render_finished_sem");
     }
 }
 
@@ -4644,7 +4700,9 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
     uint32_t height,
     VkSampleCountFlagBits sample_count_flags,
     VkImageUsageFlags usage,
-    VkImageAspectFlags aspect_mask)
+    VkImageAspectFlags aspect_mask,
+    const char* image_debug_label,
+    const char* view_debug_label)
 {
     SOKOL_ASSERT(_sapp.vk.physical_device);
     SOKOL_ASSERT(_sapp.vk.device);
@@ -4676,6 +4734,7 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
         _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_IMAGE_FAILED);
     }
     SOKOL_ASSERT(surf->img);
+    _sapp_vk_set_object_label(VK_OBJECT_TYPE_IMAGE, (uint64_t)surf->img, image_debug_label);
 
     _SAPP_STRUCT(VkMemoryRequirements, mem_reqs);
     vkGetImageMemoryRequirements(_sapp.vk.device, surf->img, &mem_reqs);
@@ -4702,6 +4761,7 @@ _SOKOL_PRIVATE void _sapp_vk_swapchain_create_surface(
         _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED);
     }
     SOKOL_ASSERT(surf->view);
+    _sapp_vk_set_object_label(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)surf->view, view_debug_label);
 }
 
 _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
@@ -4791,6 +4851,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
             _SAPP_PANIC(VULKAN_SWAPCHAIN_CREATE_IMAGE_VIEW_FAILED);
         }
         SOKOL_ASSERT(_sapp.vk.swapchain_views[i]);
+        _sapp_vk_set_object_label(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)_sapp.vk.swapchain_views[i], "swapchain_view");
     }
 
     // create depth-stencil buffer
@@ -4801,7 +4862,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
         height,
         (VkSampleCountFlagBits)_sapp.sample_count,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
+        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+        "swapchain_depthstencil_image",
+        "swapchain_depthstencil_view");
 
     // optionally create MSAA surface
     if (_sapp.sample_count > 1) {
@@ -4812,7 +4875,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_swapchain(bool recreate) {
             height,
             (VkSampleCountFlagBits)_sapp.sample_count,
             VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            "swapchain_msaa_image",
+            "swapchain_msaa_view");
     }
 
     // this is the only place in the Vulkan code path which updates
@@ -4862,6 +4927,7 @@ _SOKOL_PRIVATE void _sapp_vk_recreate_swapchain(void) {
 
 _SOKOL_PRIVATE void _sapp_vk_init(void) {
     _sapp_vk_create_instance();
+    _sapp_vk_load_instance_ext_funcs();
     _sapp_vk_create_surface();
     _sapp_vk_pick_physical_device();
     _sapp_vk_create_device();
@@ -5343,6 +5409,27 @@ _SOKOL_PRIVATE void _sapp_macos_app_event(sapp_event_type type) {
     }
 }
 
+// called in applicationDidFinishedLaunching when no window size was provided
+_SOKOL_PRIVATE void _sapp_macos_init_default_dimensions(void) {
+    if (_sapp.desc.high_dpi) {
+        _sapp.dpi_scale = NSScreen.mainScreen.backingScaleFactor;
+    } else {
+        _sapp.dpi_scale = 1.0f;
+    }
+    NSRect screen_rect = NSScreen.mainScreen.frame;
+    // use 4/5 of screen size as default size
+    const float default_widthf = (screen_rect.size.width * 4.0f) / 5.0f;
+    const float default_heightf = (screen_rect.size.height * 4.0f) / 5.0f;
+    if (_sapp.window_width == 0) {
+        _sapp.window_width = _sapp_roundf_gzero(default_widthf);
+    }
+    if (_sapp.window_height == 0) {
+        _sapp.window_height = _sapp_roundf_gzero(default_heightf);
+    }
+    _sapp.framebuffer_width = _sapp_roundf_gzero(default_widthf * _sapp.dpi_scale);
+    _sapp.framebuffer_height = _sapp_roundf_gzero(default_heightf * _sapp.dpi_scale);
+}
+
 /* NOTE: unlike the iOS version of this function, the macOS version
     can dynamically update the DPI scaling factor when a window is moved
     between HighDPI / LowDPI screens.
@@ -5593,14 +5680,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _SOKOL_UNUSED(aNotification);
     _sapp_macos_init_cursors();
     if ((_sapp.window_width == 0) || (_sapp.window_height == 0)) {
-        // use 4/5 of screen size as default size
-        NSRect screen_rect = NSScreen.mainScreen.frame;
-        if (_sapp.window_width == 0) {
-            _sapp.window_width = _sapp_roundf_gzero((screen_rect.size.width * 4.0f) / 5.0f);
-        }
-        if (_sapp.window_height == 0) {
-            _sapp.window_height = _sapp_roundf_gzero((screen_rect.size.height * 4.0f) / 5.0f);
-        }
+        _sapp_macos_init_default_dimensions();
     }
     const NSUInteger style =
         NSWindowStyleMaskTitled |
@@ -6554,8 +6634,7 @@ EMSCRIPTEN_KEEPALIVE void _sapp_emsc_end_drop(int x, int y, int mods) {
 }
 
 EMSCRIPTEN_KEEPALIVE void _sapp_emsc_invoke_fetch_cb(int index, int success, int error_code, _sapp_html5_fetch_callback callback, uint32_t fetched_size, void* buf_ptr, uint32_t buf_size, void* user_data) {
-    sapp_html5_fetch_response response;
-    _sapp_clear(&response, sizeof(response));
+    _SAPP_STRUCT(sapp_html5_fetch_response, response);
     response.succeeded = (0 != success);
     response.error_code = (sapp_html5_fetch_error) error_code;
     response.file_index = index;
@@ -8227,8 +8306,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rtv);
 
     /* common desc for MSAA and depth-stencil texture */
-    D3D11_TEXTURE2D_DESC tex_desc;
-    _sapp_clear(&tex_desc, sizeof(tex_desc));
+    _SAPP_STRUCT(D3D11_TEXTURE2D_DESC, tex_desc);
     tex_desc.Width = (UINT)_sapp.framebuffer_width;
     tex_desc.Height = (UINT)_sapp.framebuffer_height;
     tex_desc.MipLevels = 1;
@@ -8379,8 +8457,7 @@ _SOKOL_PRIVATE bool _sapp_wgl_ext_supported(const char* ext) {
 
 _SOKOL_PRIVATE void _sapp_wgl_load_extensions(void) {
     SOKOL_ASSERT(_sapp.wgl.msg_dc);
-    PIXELFORMATDESCRIPTOR pfd;
-    _sapp_clear(&pfd, sizeof(pfd));
+    _SAPP_STRUCT(PIXELFORMATDESCRIPTOR, pfd);
     pfd.nSize = sizeof(pfd);
     pfd.nVersion = 1;
     pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
@@ -8495,8 +8572,7 @@ _SOKOL_PRIVATE int _sapp_wgl_find_pixel_format(void) {
             continue;
         }
 
-        _sapp_gl_fbconfig u;
-        _sapp_clear(&u, sizeof(u));
+        _SAPP_STRUCT(_sapp_gl_fbconfig, u);
         u.red_bits     = query_results[result_red_bits_index];
         u.green_bits   = query_results[result_green_bits_index];
         u.blue_bits    = query_results[result_blue_bits_index];
@@ -8620,8 +8696,7 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
 
 _SOKOL_PRIVATE void _sapp_win32_set_fullscreen(bool fullscreen, UINT swp_flags) {
     HMONITOR monitor = MonitorFromWindow(_sapp.win32.hwnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO minfo;
-    _sapp_clear(&minfo, sizeof(minfo));
+    _SAPP_STRUCT(MONITORINFO, minfo);
     minfo.cbSize = sizeof(MONITORINFO);
     GetMonitorInfo(monitor, &minfo);
     const RECT mr = minfo.rcMonitor;
@@ -9055,8 +9130,7 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
     #if defined(SOKOL_D3D11)
         // on D3D11, use the more precise DXGI timestamp
         if (_sapp.d3d11.use_dxgi_frame_stats) {
-            DXGI_FRAME_STATISTICS dxgi_stats;
-            _sapp_clear(&dxgi_stats, sizeof(dxgi_stats));
+            _SAPP_STRUCT(DXGI_FRAME_STATISTICS, dxgi_stats);
             HRESULT hr = _sapp_dxgi_GetFrameStatistics(_sapp.d3d11.swap_chain, &dxgi_stats);
             if (SUCCEEDED(hr)) {
                 if (dxgi_stats.SyncRefreshCount != _sapp.d3d11.sync_refresh_count) {
@@ -9082,6 +9156,8 @@ _SOKOL_PRIVATE void _sapp_win32_timing_measure(void) {
 _SOKOL_PRIVATE void _sapp_win32_frame(bool from_winproc) {
     #if defined(SOKOL_WGPU)
         _sapp_wgpu_frame();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_frame();
     #else
         _sapp_frame();
     #endif
@@ -9203,8 +9279,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     _sapp_win32_mouse_update(lParam);
                     if (!_sapp.win32.mouse.tracked) {
                         _sapp.win32.mouse.tracked = true;
-                        TRACKMOUSEEVENT tme;
-                        _sapp_clear(&tme, sizeof(tme));
+                        _SAPP_STRUCT(TRACKMOUSEEVENT, tme);
                         tme.cbSize = sizeof(tme);
                         tme.dwFlags = TME_LEAVE;
                         tme.hwndTrack = _sapp.win32.hwnd;
@@ -9330,8 +9405,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
 }
 
 _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
-    WNDCLASSW wndclassw;
-    _sapp_clear(&wndclassw, sizeof(wndclassw));
+    _SAPP_STRUCT(WNDCLASSW, wndclassw);
     wndclassw.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
     wndclassw.lpfnWndProc = (WNDPROC) _sapp_win32_wndproc;
     wndclassw.hInstance = GetModuleHandleW(NULL);
@@ -9592,8 +9666,7 @@ _SOKOL_PRIVATE void _sapp_win32_update_window_title(void) {
 }
 
 _SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* desc, bool is_cursor) {
-    BITMAPV5HEADER bi;
-    _sapp_clear(&bi, sizeof(bi));
+    _SAPP_STRUCT(BITMAPV5HEADER, bi);
     bi.bV5Size = sizeof(bi);
     bi.bV5Width = desc->width;
     bi.bV5Height = -desc->height;   // NOTE the '-' here to indicate that origin is top-left
@@ -9631,8 +9704,7 @@ _SOKOL_PRIVATE HICON _sapp_win32_create_icon_from_image(const sapp_image_desc* d
         source += 4;
     }
 
-    ICONINFO icon_info;
-    _sapp_clear(&icon_info, sizeof(icon_info));
+    _SAPP_STRUCT(ICONINFO, icon_info);
     icon_info.fIcon = !is_cursor;
     icon_info.xHotspot = (DWORD) (is_cursor ? desc->cursor_hotspot_x : 0);
     icon_info.yHotspot = (DWORD) (is_cursor ? desc->cursor_hotspot_y : 0);
@@ -9703,6 +9775,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_create_context();
     #elif defined(SOKOL_WGPU)
         _sapp_wgpu_init();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_init();
     #endif
     _sapp.valid = true;
 
@@ -9751,6 +9825,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         _sapp_wgl_shutdown();
     #elif defined(SOKOL_WGPU)
         _sapp_wgpu_discard();
+    #elif defined(SOKOL_VULKAN)
+        _sapp_vk_discard();
     #endif
     _sapp_win32_destroy_window();
     _sapp_win32_destroy_icons();
@@ -12047,9 +12123,7 @@ _SOKOL_PRIVATE void _sapp_glx_swapinterval(int interval) {
 #endif // _SAPP_GLX
 
 _SOKOL_PRIVATE void _sapp_x11_send_event(Atom type, int a, int b, int c, int d, int e) {
-    XEvent event;
-    _sapp_clear(&event, sizeof(event));
-
+    _SAPP_STRUCT(XEvent, event);
     event.type = ClientMessage;
     event.xclient.window = _sapp.x11.window;
     event.xclient.format = 32;
@@ -12413,8 +12487,7 @@ _SOKOL_PRIVATE void _sapp_x11_create_window(Visual* visual_or_null, int depth) {
         depth = DefaultDepth(_sapp.x11.display, _sapp.x11.screen);
     }
     _sapp.x11.colormap = XCreateColormap(_sapp.x11.display, _sapp.x11.root, visual, AllocNone);
-    XSetWindowAttributes wa;
-    _sapp_clear(&wa, sizeof(wa));
+    _SAPP_STRUCT(XSetWindowAttributes, wa);
     const uint32_t wamask = CWBorderPixel | CWColormap | CWEventMask;
     wa.colormap = _sapp.x11.colormap;
     wa.border_pixel = 0;
@@ -12961,8 +13034,7 @@ _SOKOL_PRIVATE void _sapp_x11_on_selectionnotify(XEvent* event) {
             }
         }
         if (_sapp.x11.xdnd.version >= 2) {
-            XEvent reply;
-            _sapp_clear(&reply, sizeof(reply));
+            _SAPP_STRUCT(XEvent, reply);
             reply.type = ClientMessage;
             reply.xclient.window = _sapp.x11.xdnd.source;
             reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
@@ -13029,8 +13101,7 @@ _SOKOL_PRIVATE void _sapp_x11_on_clientmessage(XEvent* event) {
                                 _sapp.x11.window,
                                 time);
         } else if (_sapp.x11.xdnd.version >= 2) {
-            XEvent reply;
-            _sapp_clear(&reply, sizeof(reply));
+            _SAPP_STRUCT(XEvent, reply);
             reply.type = ClientMessage;
             reply.xclient.window = _sapp.x11.xdnd.source;
             reply.xclient.message_type = _sapp.x11.xdnd.XdndFinished;
@@ -13048,8 +13119,7 @@ _SOKOL_PRIVATE void _sapp_x11_on_clientmessage(XEvent* event) {
         if (_sapp.x11.xdnd.version > _SAPP_X11_XDND_VERSION) {
             return;
         }
-        XEvent reply;
-        _sapp_clear(&reply, sizeof(reply));
+        _SAPP_STRUCT(XEvent, reply);
         reply.type = ClientMessage;
         reply.xclient.window = _sapp.x11.xdnd.source;
         reply.xclient.message_type = _sapp.x11.xdnd.XdndStatus;
@@ -13076,8 +13146,7 @@ _SOKOL_PRIVATE void _sapp_x11_on_selectionrequest(XEvent* event) {
         return;
     }
     SOKOL_ASSERT(_sapp.clipboard.buffer);
-    XSelectionEvent reply;
-    _sapp_clear(&reply, sizeof(reply));
+    _SAPP_STRUCT(XSelectionEvent, reply);
     reply.type = SelectionNotify;
     reply.display = req->display;
     reply.requestor = req->requestor;
@@ -13230,8 +13299,7 @@ _SOKOL_PRIVATE void _sapp_egl_init(void) {
         _SAPP_PANIC(LINUX_EGL_NO_NATIVE_VISUAL);
     }
 
-    XVisualInfo visual_info_template;
-    _sapp_clear(&visual_info_template, sizeof(visual_info_template));
+    _SAPP_STRUCT(XVisualInfo, visual_info_template);
     visual_info_template.visualid = (VisualID)visual_id;
 
     int num_visuals;
@@ -13433,8 +13501,7 @@ SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
 sapp_desc sokol_main(int argc, char* argv[]) {
     _SOKOL_UNUSED(argc);
     _SOKOL_UNUSED(argv);
-    sapp_desc desc;
-    _sapp_clear(&desc, sizeof(desc));
+    _SAPP_STRUCT(sapp_desc, desc);
     return desc;
 }
 #else
@@ -13850,8 +13917,7 @@ SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request
 
 SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
     SOKOL_ASSERT(_sapp.valid);
-    sapp_environment res;
-    _sapp_clear(&res, sizeof(res));
+    _SAPP_STRUCT(sapp_environment, res);
     res.defaults.color_format = sapp_color_format();
     res.defaults.depth_format = sapp_depth_format();
     res.defaults.sample_count = sapp_sample_count();
@@ -13870,6 +13936,7 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
         res.wgpu.device = (const void*) _sapp.wgpu.device;
     #endif
     #if defined(SOKOL_VULKAN)
+        res.vulkan.instance = (const void*) _sapp.vk.instance;
         res.vulkan.physical_device = (const void*) _sapp.vk.physical_device;
         res.vulkan.device = (const void*) _sapp.vk.device;
         res.vulkan.queue = (const void*) _sapp.vk.queue;
@@ -13880,8 +13947,7 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
 
 SOKOL_API_IMPL sapp_swapchain sapp_get_swapchain(void) {
     SOKOL_ASSERT(_sapp.valid);
-    sapp_swapchain res;
-    _sapp_clear(&res, sizeof(res));
+    _SAPP_STRUCT(sapp_swapchain, res);
     res.width = sapp_width();
     res.height = sapp_height();
     res.color_format = sapp_color_format();
