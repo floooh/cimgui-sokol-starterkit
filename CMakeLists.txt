@@ -33,7 +33,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL Darwin)
     target_link_libraries(sokol PUBLIC
         "-framework QuartzCore"
         "-framework Cocoa"
-        "-framework MetalKit"
         "-framework Metal")
 else()
     add_library(sokol STATIC sokol/sokol.c ${SOKOL_HEADERS})

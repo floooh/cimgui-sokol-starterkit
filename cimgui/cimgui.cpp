@@ -2304,77 +2304,77 @@ CIMGUI_API void cimgui::igSetNextItemAllowOverlap(void)
     ::ImGui::SetNextItemAllowOverlap();
 }
 
-CIMGUI_API bool    cimgui::igIsItemHovered(ImGuiHoveredFlags flags)
+CIMGUI_API bool           cimgui::igIsItemHovered(ImGuiHoveredFlags flags)
 {
     return ::ImGui::IsItemHovered(flags);
 }
 
-CIMGUI_API bool    cimgui::igIsItemActive(void)
+CIMGUI_API bool           cimgui::igIsItemActive(void)
 {
     return ::ImGui::IsItemActive();
 }
 
-CIMGUI_API bool    cimgui::igIsItemFocused(void)
+CIMGUI_API bool           cimgui::igIsItemFocused(void)
 {
     return ::ImGui::IsItemFocused();
 }
 
-CIMGUI_API bool    cimgui::igIsItemClicked(void)
+CIMGUI_API bool           cimgui::igIsItemClicked(void)
 {
     return ::ImGui::IsItemClicked();
 }
 
-CIMGUI_API bool    cimgui::igIsItemClickedEx(ImGuiMouseButton mouse_button)
+CIMGUI_API bool           cimgui::igIsItemClickedEx(ImGuiMouseButton mouse_button)
 {
     return ::ImGui::IsItemClicked(mouse_button);
 }
 
-CIMGUI_API bool    cimgui::igIsItemVisible(void)
+CIMGUI_API bool           cimgui::igIsItemVisible(void)
 {
     return ::ImGui::IsItemVisible();
 }
 
-CIMGUI_API bool    cimgui::igIsItemEdited(void)
+CIMGUI_API bool           cimgui::igIsItemEdited(void)
 {
     return ::ImGui::IsItemEdited();
 }
 
-CIMGUI_API bool    cimgui::igIsItemActivated(void)
+CIMGUI_API bool           cimgui::igIsItemActivated(void)
 {
     return ::ImGui::IsItemActivated();
 }
 
-CIMGUI_API bool    cimgui::igIsItemDeactivated(void)
+CIMGUI_API bool           cimgui::igIsItemDeactivated(void)
 {
     return ::ImGui::IsItemDeactivated();
 }
 
-CIMGUI_API bool    cimgui::igIsItemDeactivatedAfterEdit(void)
+CIMGUI_API bool           cimgui::igIsItemDeactivatedAfterEdit(void)
 {
     return ::ImGui::IsItemDeactivatedAfterEdit();
 }
 
-CIMGUI_API bool    cimgui::igIsItemToggledOpen(void)
+CIMGUI_API bool           cimgui::igIsItemToggledOpen(void)
 {
     return ::ImGui::IsItemToggledOpen();
 }
 
-CIMGUI_API bool    cimgui::igIsAnyItemHovered(void)
+CIMGUI_API bool           cimgui::igIsAnyItemHovered(void)
 {
     return ::ImGui::IsAnyItemHovered();
 }
 
-CIMGUI_API bool    cimgui::igIsAnyItemActive(void)
+CIMGUI_API bool           cimgui::igIsAnyItemActive(void)
 {
     return ::ImGui::IsAnyItemActive();
 }
 
-CIMGUI_API bool    cimgui::igIsAnyItemFocused(void)
+CIMGUI_API bool           cimgui::igIsAnyItemFocused(void)
 {
     return ::ImGui::IsAnyItemFocused();
 }
 
-CIMGUI_API ImGuiID cimgui::igGetItemID(void)
+CIMGUI_API ImGuiID        cimgui::igGetItemID(void)
 {
     return ::ImGui::GetItemID();
 }
@@ -2392,6 +2392,11 @@ CIMGUI_API cimgui::ImVec2 cimgui::igGetItemRectMax(void)
 CIMGUI_API cimgui::ImVec2 cimgui::igGetItemRectSize(void)
 {
     return ConvertFromCPP_ImVec2(::ImGui::GetItemRectSize());
+}
+
+CIMGUI_API ImGuiItemFlags cimgui::igGetItemFlags(void)
+{
+    return ::ImGui::GetItemFlags();
 }
 
 CIMGUI_API cimgui::ImGuiViewport* cimgui::igGetMainViewport(void)
@@ -2819,6 +2824,11 @@ CIMGUI_API void cimgui::ImGuiInputTextCallbackData_InsertChars(cimgui::ImGuiInpu
 CIMGUI_API void cimgui::ImGuiInputTextCallbackData_SelectAll(cimgui::ImGuiInputTextCallbackData* self)
 {
     reinterpret_cast<::ImGuiInputTextCallbackData*>(self)->SelectAll();
+}
+
+CIMGUI_API void cimgui::ImGuiInputTextCallbackData_SetSelection(cimgui::ImGuiInputTextCallbackData* self, int s, int e)
+{
+    reinterpret_cast<::ImGuiInputTextCallbackData*>(self)->SetSelection(s, e);
 }
 
 CIMGUI_API void cimgui::ImGuiInputTextCallbackData_ClearSelection(cimgui::ImGuiInputTextCallbackData* self)
@@ -3678,6 +3688,16 @@ CIMGUI_API cimgui::ImFont*   cimgui::ImFontAtlas_AddFontDefault(cimgui::ImFontAt
     return reinterpret_cast<::cimgui::ImFont*>(reinterpret_cast<::ImFontAtlas*>(self)->AddFontDefault(reinterpret_cast<const ::ImFontConfig*>(font_cfg)));
 }
 
+CIMGUI_API cimgui::ImFont*   cimgui::ImFontAtlas_AddFontDefaultVector(cimgui::ImFontAtlas* self, const cimgui::ImFontConfig* font_cfg)
+{
+    return reinterpret_cast<::cimgui::ImFont*>(reinterpret_cast<::ImFontAtlas*>(self)->AddFontDefaultVector(reinterpret_cast<const ::ImFontConfig*>(font_cfg)));
+}
+
+CIMGUI_API cimgui::ImFont*   cimgui::ImFontAtlas_AddFontDefaultBitmap(cimgui::ImFontAtlas* self, const cimgui::ImFontConfig* font_cfg)
+{
+    return reinterpret_cast<::cimgui::ImFont*>(reinterpret_cast<::ImFontAtlas*>(self)->AddFontDefaultBitmap(reinterpret_cast<const ::ImFontConfig*>(font_cfg)));
+}
+
 CIMGUI_API cimgui::ImFont*   cimgui::ImFontAtlas_AddFontFromFileTTF(cimgui::ImFontAtlas* self, const char* filename, float size_pixels, const cimgui::ImFontConfig* font_cfg, const ImWchar* glyph_ranges)
 {
     return reinterpret_cast<::cimgui::ImFont*>(reinterpret_cast<::ImFontAtlas*>(self)->AddFontFromFileTTF(filename, size_pixels, reinterpret_cast<const ::ImFontConfig*>(font_cfg), glyph_ranges));
@@ -4034,26 +4054,6 @@ CIMGUI_API cimgui::ImVec2 cimgui::igGetWindowContentRegionMin(void)
 CIMGUI_API cimgui::ImVec2 cimgui::igGetWindowContentRegionMax(void)
 {
     return ConvertFromCPP_ImVec2(::ImGui::GetWindowContentRegionMax());
-}
-
-CIMGUI_API bool   cimgui::igBeginChildFrame(ImGuiID id, cimgui::ImVec2 size)
-{
-    return ::ImGui::BeginChildFrame(id, ConvertToCPP_ImVec2(size));
-}
-
-CIMGUI_API bool   cimgui::igBeginChildFrameEx(ImGuiID id, cimgui::ImVec2 size, ImGuiWindowFlags window_flags)
-{
-    return ::ImGui::BeginChildFrame(id, ConvertToCPP_ImVec2(size), window_flags);
-}
-
-CIMGUI_API void   cimgui::igEndChildFrame(void)
-{
-    ::ImGui::EndChildFrame();
-}
-
-CIMGUI_API void   cimgui::igShowStackToolWindow(bool* p_open)
-{
-    ::ImGui::ShowStackToolWindow(p_open);
 }
 
 CIMGUI_API bool   cimgui::igComboObsolete(const char* label, int* current_item, bool (*old_callback)(void* user_data, int idx, const char** out_text), void* user_data, int items_count)
