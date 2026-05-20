@@ -8,10 +8,15 @@
 #include <stdio.h>
 
 // Wrap this in a namespace to keep it separate from the C++ API
+
+// This define prevents #defines in the header getting defined again (as they are already in the normal header above),
+// and thus generating redefinition warnings
+#define DEAR_BINDINGS_INTERNAL_GLUE_CODE
 namespace cimgui
 {
 #include "cimgui.h"
 }
+#undef DEAR_BINDINGS_INTERNAL_GLUE_CODE
 
 // Manual helpers
 // These implement functionality that isn't in the original C++ API, but is useful to callers from other languages
@@ -1730,6 +1735,11 @@ CIMGUI_API void  cimgui::igSetNextItemStorageID(ImGuiID storage_id)
     ::ImGui::SetNextItemStorageID(storage_id);
 }
 
+CIMGUI_API bool  cimgui::igTreeNodeGetOpen(ImGuiID storage_id)
+{
+    return ::ImGui::TreeNodeGetOpen(storage_id);
+}
+
 CIMGUI_API bool cimgui::igSelectable(const char* label)
 {
     return ::ImGui::Selectable(label);
@@ -2534,9 +2544,9 @@ CIMGUI_API void cimgui::igSetNextItemShortcut(ImGuiKeyChord key_chord, ImGuiInpu
     ::ImGui::SetNextItemShortcut(key_chord, flags);
 }
 
-CIMGUI_API void cimgui::igSetItemKeyOwner(cimgui::ImGuiKey key)
+CIMGUI_API bool cimgui::igSetItemKeyOwner(cimgui::ImGuiKey key)
 {
-    ::ImGui::SetItemKeyOwner(static_cast<::ImGuiKey>(key));
+    return ::ImGui::SetItemKeyOwner(static_cast<::ImGuiKey>(key));
 }
 
 CIMGUI_API bool             cimgui::igIsMouseDown(ImGuiMouseButton button)
@@ -3184,14 +3194,34 @@ CIMGUI_API void        cimgui::ImDrawList_AddLineEx(cimgui::ImDrawList* self, ci
     reinterpret_cast<::ImDrawList*>(self)->AddLine(ConvertToCPP_ImVec2(p1), ConvertToCPP_ImVec2(p2), col, thickness);
 }
 
+CIMGUI_API void        cimgui::ImDrawList_AddLineH(cimgui::ImDrawList* self, float min_x, float max_x, float y, ImU32 col)
+{
+    reinterpret_cast<::ImDrawList*>(self)->AddLineH(min_x, max_x, y, col);
+}
+
+CIMGUI_API void        cimgui::ImDrawList_AddLineHEx(cimgui::ImDrawList* self, float min_x, float max_x, float y, ImU32 col, float thickness)
+{
+    reinterpret_cast<::ImDrawList*>(self)->AddLineH(min_x, max_x, y, col, thickness);
+}
+
+CIMGUI_API void        cimgui::ImDrawList_AddLineV(cimgui::ImDrawList* self, float x, float min_y, float max_y, ImU32 col)
+{
+    reinterpret_cast<::ImDrawList*>(self)->AddLineV(x, min_y, max_y, col);
+}
+
+CIMGUI_API void        cimgui::ImDrawList_AddLineVEx(cimgui::ImDrawList* self, float x, float min_y, float max_y, ImU32 col, float thickness)
+{
+    reinterpret_cast<::ImDrawList*>(self)->AddLineV(x, min_y, max_y, col, thickness);
+}
+
 CIMGUI_API void        cimgui::ImDrawList_AddRect(cimgui::ImDrawList* self, cimgui::ImVec2 p_min, cimgui::ImVec2 p_max, ImU32 col)
 {
     reinterpret_cast<::ImDrawList*>(self)->AddRect(ConvertToCPP_ImVec2(p_min), ConvertToCPP_ImVec2(p_max), col);
 }
 
-CIMGUI_API void        cimgui::ImDrawList_AddRectEx(cimgui::ImDrawList* self, cimgui::ImVec2 p_min, cimgui::ImVec2 p_max, ImU32 col, float rounding, ImDrawFlags flags, float thickness)
+CIMGUI_API void        cimgui::ImDrawList_AddRectEx(cimgui::ImDrawList* self, cimgui::ImVec2 p_min, cimgui::ImVec2 p_max, ImU32 col, float rounding, float thickness, ImDrawFlags flags)
 {
-    reinterpret_cast<::ImDrawList*>(self)->AddRect(ConvertToCPP_ImVec2(p_min), ConvertToCPP_ImVec2(p_max), col, rounding, flags, thickness);
+    reinterpret_cast<::ImDrawList*>(self)->AddRect(ConvertToCPP_ImVec2(p_min), ConvertToCPP_ImVec2(p_max), col, rounding, thickness, flags);
 }
 
 CIMGUI_API void        cimgui::ImDrawList_AddRectFilled(cimgui::ImDrawList* self, cimgui::ImVec2 p_min, cimgui::ImVec2 p_max, ImU32 col)
@@ -3319,9 +3349,9 @@ CIMGUI_API void        cimgui::ImDrawList_AddBezierQuadratic(cimgui::ImDrawList*
     reinterpret_cast<::ImDrawList*>(self)->AddBezierQuadratic(ConvertToCPP_ImVec2(p1), ConvertToCPP_ImVec2(p2), ConvertToCPP_ImVec2(p3), col, thickness, num_segments);
 }
 
-CIMGUI_API void        cimgui::ImDrawList_AddPolyline(cimgui::ImDrawList* self, const cimgui::ImVec2* points, int num_points, ImU32 col, ImDrawFlags flags, float thickness)
+CIMGUI_API void        cimgui::ImDrawList_AddPolyline(cimgui::ImDrawList* self, const cimgui::ImVec2* points, int num_points, ImU32 col, float thickness, ImDrawFlags flags)
 {
-    reinterpret_cast<::ImDrawList*>(self)->AddPolyline(reinterpret_cast<const ::ImVec2*>(points), num_points, col, flags, thickness);
+    reinterpret_cast<::ImDrawList*>(self)->AddPolyline(reinterpret_cast<const ::ImVec2*>(points), num_points, col, thickness, flags);
 }
 
 CIMGUI_API void        cimgui::ImDrawList_AddConvexPolyFilled(cimgui::ImDrawList* self, const cimgui::ImVec2* points, int num_points, ImU32 col)
@@ -3384,9 +3414,9 @@ CIMGUI_API void        cimgui::ImDrawList_PathFillConcave(cimgui::ImDrawList* se
     reinterpret_cast<::ImDrawList*>(self)->PathFillConcave(col);
 }
 
-CIMGUI_API void        cimgui::ImDrawList_PathStroke(cimgui::ImDrawList* self, ImU32 col, ImDrawFlags flags, float thickness)
+CIMGUI_API void        cimgui::ImDrawList_PathStroke(cimgui::ImDrawList* self, ImU32 col, float thickness, ImDrawFlags flags)
 {
-    reinterpret_cast<::ImDrawList*>(self)->PathStroke(col, flags, thickness);
+    reinterpret_cast<::ImDrawList*>(self)->PathStroke(col, thickness, flags);
 }
 
 CIMGUI_API void        cimgui::ImDrawList_PathArcTo(cimgui::ImDrawList* self, cimgui::ImVec2 center, float radius, float a_min, float a_max, int num_segments)
@@ -3424,9 +3454,9 @@ CIMGUI_API void        cimgui::ImDrawList_PathRect(cimgui::ImDrawList* self, cim
     reinterpret_cast<::ImDrawList*>(self)->PathRect(ConvertToCPP_ImVec2(rect_min), ConvertToCPP_ImVec2(rect_max), rounding, flags);
 }
 
-CIMGUI_API void        cimgui::ImDrawList_AddCallback(cimgui::ImDrawList* self, cimgui::ImDrawCallback callback, void* userdata)
+CIMGUI_API void        cimgui::ImDrawList_AddCallback(cimgui::ImDrawList* self, cimgui::ImDrawCallback callback)
 {
-    reinterpret_cast<::ImDrawList*>(self)->AddCallback(reinterpret_cast<::ImDrawCallback>(callback), userdata);
+    reinterpret_cast<::ImDrawList*>(self)->AddCallback(reinterpret_cast<::ImDrawCallback>(callback));
 }
 
 CIMGUI_API void        cimgui::ImDrawList_AddCallbackEx(cimgui::ImDrawList* self, cimgui::ImDrawCallback callback, void* userdata, size_t userdata_size)
@@ -3500,6 +3530,21 @@ CIMGUI_API void        cimgui::ImDrawList_PrimVtx(cimgui::ImDrawList* self, cimg
 }
 
 #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+
+CIMGUI_API void cimgui::ImDrawList_AddRectImDrawFlags(cimgui::ImDrawList* self, cimgui::ImVec2 p_min, cimgui::ImVec2 p_max, ImU32 col, float rounding, ImDrawFlags flags, float thickness)
+{
+    reinterpret_cast<::ImDrawList*>(self)->AddRect(ConvertToCPP_ImVec2(p_min), ConvertToCPP_ImVec2(p_max), col, rounding, flags, thickness);
+}
+
+CIMGUI_API void cimgui::ImDrawList_AddPolylineImDrawFlags(cimgui::ImDrawList* self, const cimgui::ImVec2* points, int num_points, ImU32 col, ImDrawFlags flags, float thickness)
+{
+    reinterpret_cast<::ImDrawList*>(self)->AddPolyline(reinterpret_cast<const ::ImVec2*>(points), num_points, col, flags, thickness);
+}
+
+CIMGUI_API void cimgui::ImDrawList_PathStrokeImDrawFlags(cimgui::ImDrawList* self, ImU32 col, ImDrawFlags flags, float thickness)
+{
+    reinterpret_cast<::ImDrawList*>(self)->PathStroke(col, flags, thickness);
+}
 
 CIMGUI_API void cimgui::ImDrawList_PushTextureID(cimgui::ImDrawList* self, cimgui::ImTextureRef tex_ref)
 {
@@ -3728,6 +3773,11 @@ CIMGUI_API void              cimgui::ImFontAtlas_Clear(cimgui::ImFontAtlas* self
     reinterpret_cast<::ImFontAtlas*>(self)->Clear();
 }
 
+CIMGUI_API void              cimgui::ImFontAtlas_ClearFonts(cimgui::ImFontAtlas* self)
+{
+    reinterpret_cast<::ImFontAtlas*>(self)->ClearFonts();
+}
+
 CIMGUI_API void              cimgui::ImFontAtlas_CompactCache(cimgui::ImFontAtlas* self)
 {
     reinterpret_cast<::ImFontAtlas*>(self)->CompactCache();
@@ -3741,11 +3791,6 @@ CIMGUI_API void              cimgui::ImFontAtlas_SetFontLoader(cimgui::ImFontAtl
 CIMGUI_API void              cimgui::ImFontAtlas_ClearInputData(cimgui::ImFontAtlas* self)
 {
     reinterpret_cast<::ImFontAtlas*>(self)->ClearInputData();
-}
-
-CIMGUI_API void              cimgui::ImFontAtlas_ClearFonts(cimgui::ImFontAtlas* self)
-{
-    reinterpret_cast<::ImFontAtlas*>(self)->ClearFonts();
 }
 
 CIMGUI_API void              cimgui::ImFontAtlas_ClearTexData(cimgui::ImFontAtlas* self)
@@ -4054,26 +4099,6 @@ CIMGUI_API cimgui::ImVec2 cimgui::igGetWindowContentRegionMin(void)
 CIMGUI_API cimgui::ImVec2 cimgui::igGetWindowContentRegionMax(void)
 {
     return ConvertFromCPP_ImVec2(::ImGui::GetWindowContentRegionMax());
-}
-
-CIMGUI_API bool   cimgui::igComboObsolete(const char* label, int* current_item, bool (*old_callback)(void* user_data, int idx, const char** out_text), void* user_data, int items_count)
-{
-    return ::ImGui::Combo(label, current_item, old_callback, user_data, items_count);
-}
-
-CIMGUI_API bool   cimgui::igComboObsoleteEx(const char* label, int* current_item, bool (*old_callback)(void* user_data, int idx, const char** out_text), void* user_data, int items_count, int popup_max_height_in_items)
-{
-    return ::ImGui::Combo(label, current_item, old_callback, user_data, items_count, popup_max_height_in_items);
-}
-
-CIMGUI_API bool   cimgui::igListBoxObsolete(const char* label, int* current_item, bool (*old_callback)(void* user_data, int idx, const char** out_text), void* user_data, int items_count)
-{
-    return ::ImGui::ListBox(label, current_item, old_callback, user_data, items_count);
-}
-
-CIMGUI_API bool   cimgui::igListBoxObsoleteEx(const char* label, int* current_item, bool (*old_callback)(void* user_data, int idx, const char** out_text), void* user_data, int items_count, int height_in_items)
-{
-    return ::ImGui::ListBox(label, current_item, old_callback, user_data, items_count, height_in_items);
 }
 
 #endif // #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
