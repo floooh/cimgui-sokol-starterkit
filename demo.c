@@ -67,6 +67,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .window_title = "Hello Sokol + Dear ImGui",
         .width = 800,
         .height = 600,
+        .depth_format = SAPP_PIXELFORMAT_NONE,
         .icon.sokol_default = true,
         .logger.func = slog_func,
     };
