@@ -1624,11 +1624,6 @@ CIMGUI_API bool cimgui::igColorButtonEx(const char* desc_id, cimgui::ImVec4 col,
     return ::ImGui::ColorButton(desc_id, ConvertToCPP_ImVec4(col), flags, ConvertToCPP_ImVec2(size));
 }
 
-CIMGUI_API void cimgui::igSetColorEditOptions(ImGuiColorEditFlags flags)
-{
-    ::ImGui::SetColorEditOptions(flags);
-}
-
 CIMGUI_API bool  cimgui::igTreeNode(const char* label)
 {
     return ::ImGui::TreeNode(label);
@@ -1956,19 +1951,19 @@ CIMGUI_API void cimgui::igEndPopup(void)
     ::ImGui::EndPopup();
 }
 
-CIMGUI_API void cimgui::igOpenPopup(const char* str_id, ImGuiPopupFlags popup_flags)
+CIMGUI_API bool cimgui::igOpenPopup(const char* str_id, ImGuiPopupFlags popup_flags)
 {
-    ::ImGui::OpenPopup(str_id, popup_flags);
+    return ::ImGui::OpenPopup(str_id, popup_flags);
 }
 
-CIMGUI_API void cimgui::igOpenPopupID(ImGuiID id, ImGuiPopupFlags popup_flags)
+CIMGUI_API bool cimgui::igOpenPopupID(ImGuiID id, ImGuiPopupFlags popup_flags)
 {
-    ::ImGui::OpenPopup(id, popup_flags);
+    return ::ImGui::OpenPopup(id, popup_flags);
 }
 
-CIMGUI_API void cimgui::igOpenPopupOnItemClick(const char* str_id, ImGuiPopupFlags popup_flags)
+CIMGUI_API bool cimgui::igOpenPopupOnItemClick(const char* str_id, ImGuiPopupFlags popup_flags)
 {
-    ::ImGui::OpenPopupOnItemClick(str_id, popup_flags);
+    return ::ImGui::OpenPopupOnItemClick(str_id, popup_flags);
 }
 
 CIMGUI_API void cimgui::igCloseCurrentPopup(void)
@@ -2051,9 +2046,9 @@ CIMGUI_API void cimgui::igTableSetupColumn(const char* label, ImGuiTableColumnFl
     ::ImGui::TableSetupColumn(label, flags);
 }
 
-CIMGUI_API void cimgui::igTableSetupColumnEx(const char* label, ImGuiTableColumnFlags flags, float init_width_or_weight, ImGuiID user_id)
+CIMGUI_API void cimgui::igTableSetupColumnEx(const char* label, ImGuiTableColumnFlags flags, float init_width_or_weight, ImGuiID user_data)
 {
-    ::ImGui::TableSetupColumn(label, flags, init_width_or_weight, user_id);
+    ::ImGui::TableSetupColumn(label, flags, init_width_or_weight, user_data);
 }
 
 CIMGUI_API void cimgui::igTableSetupScrollFreeze(int cols, int rows)
@@ -2409,6 +2404,16 @@ CIMGUI_API ImGuiItemFlags cimgui::igGetItemFlags(void)
     return ::ImGui::GetItemFlags();
 }
 
+CIMGUI_API int            cimgui::igGetItemClickedCountWithSingleClickDelay(void)
+{
+    return ::ImGui::GetItemClickedCountWithSingleClickDelay();
+}
+
+CIMGUI_API int            cimgui::igGetItemClickedCountWithSingleClickDelayEx(ImGuiMouseButton mouse_button, float delay)
+{
+    return ::ImGui::GetItemClickedCountWithSingleClickDelay(mouse_button, delay);
+}
+
 CIMGUI_API cimgui::ImGuiViewport* cimgui::igGetMainViewport(void)
 {
     return reinterpret_cast<::cimgui::ImGuiViewport*>(::ImGui::GetMainViewport());
@@ -2574,7 +2579,12 @@ CIMGUI_API bool             cimgui::igIsMouseDoubleClicked(ImGuiMouseButton butt
     return ::ImGui::IsMouseDoubleClicked(button);
 }
 
-CIMGUI_API bool             cimgui::igIsMouseReleasedWithDelay(ImGuiMouseButton button, float delay)
+CIMGUI_API bool             cimgui::igIsMouseReleasedWithDelay(ImGuiMouseButton button)
+{
+    return ::ImGui::IsMouseReleasedWithDelay(button);
+}
+
+CIMGUI_API bool             cimgui::igIsMouseReleasedWithDelayEx(ImGuiMouseButton button, float delay)
 {
     return ::ImGui::IsMouseReleasedWithDelay(button, delay);
 }
@@ -3768,16 +3778,6 @@ CIMGUI_API void              cimgui::ImFontAtlas_RemoveFont(cimgui::ImFontAtlas*
     reinterpret_cast<::ImFontAtlas*>(self)->RemoveFont(reinterpret_cast<::ImFont*>(font));
 }
 
-CIMGUI_API void              cimgui::ImFontAtlas_Clear(cimgui::ImFontAtlas* self)
-{
-    reinterpret_cast<::ImFontAtlas*>(self)->Clear();
-}
-
-CIMGUI_API void              cimgui::ImFontAtlas_ClearFonts(cimgui::ImFontAtlas* self)
-{
-    reinterpret_cast<::ImFontAtlas*>(self)->ClearFonts();
-}
-
 CIMGUI_API void              cimgui::ImFontAtlas_CompactCache(cimgui::ImFontAtlas* self)
 {
     reinterpret_cast<::ImFontAtlas*>(self)->CompactCache();
@@ -3786,6 +3786,16 @@ CIMGUI_API void              cimgui::ImFontAtlas_CompactCache(cimgui::ImFontAtla
 CIMGUI_API void              cimgui::ImFontAtlas_SetFontLoader(cimgui::ImFontAtlas* self, const cimgui::ImFontLoader* font_loader)
 {
     reinterpret_cast<::ImFontAtlas*>(self)->SetFontLoader(reinterpret_cast<const ::ImFontLoader*>(font_loader));
+}
+
+CIMGUI_API void              cimgui::ImFontAtlas_Clear(cimgui::ImFontAtlas* self)
+{
+    reinterpret_cast<::ImFontAtlas*>(self)->Clear();
+}
+
+CIMGUI_API void              cimgui::ImFontAtlas_ClearFonts(cimgui::ImFontAtlas* self)
+{
+    reinterpret_cast<::ImFontAtlas*>(self)->ClearFonts();
 }
 
 CIMGUI_API void              cimgui::ImFontAtlas_ClearInputData(cimgui::ImFontAtlas* self)
@@ -4050,6 +4060,11 @@ CIMGUI_API void cimgui::ImGuiPlatformIO_ClearRendererHandlers(cimgui::ImGuiPlatf
 }
 
 #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+
+CIMGUI_API void   cimgui::igSetColorEditOptions(ImGuiColorEditFlags flags)
+{
+    ::ImGui::SetColorEditOptions(flags);
+}
 
 CIMGUI_API void   cimgui::igPushFont(cimgui::ImFont* font)
 {
