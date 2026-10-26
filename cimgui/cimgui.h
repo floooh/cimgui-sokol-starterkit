@@ -2,7 +2,17 @@
 // **DO NOT EDIT DIRECTLY**
 // https://github.com/dearimgui/dear_bindings
 
-// dear imgui, v1.92.9b
+// Dear Bindings version as a string
+#ifndef DEAR_BINDINGS_VERSION
+#define DEAR_BINDINGS_VERSION "0.26"
+#endif
+
+// Dear Bindings version as an integer
+#ifndef DEAR_BINDINGS_VERSION_NUMBER
+#define DEAR_BINDINGS_VERSION_NUMBER 26
+#endif
+
+// dear imgui, v1.93.0
 // (headers)
 
 // Help:
@@ -34,10 +44,10 @@
 // Library Version
 // (Integer encoded as XYYZZ for use in #if preprocessor conditionals, e.g. '#if IMGUI_VERSION_NUM >= 12345')
 #ifndef DEAR_BINDINGS_INTERNAL_GLUE_CODE
-#define IMGUI_VERSION       "1.92.9b"
+#define IMGUI_VERSION       "1.93.0"
 #endif // #ifndef DEAR_BINDINGS_INTERNAL_GLUE_CODE
 #ifndef DEAR_BINDINGS_INTERNAL_GLUE_CODE
-#define IMGUI_VERSION_NUM   19291
+#define IMGUI_VERSION_NUM   19300
 #endif // #ifndef DEAR_BINDINGS_INTERNAL_GLUE_CODE
 #define IMGUI_HAS_TABLE              // Added BeginTable() - from IMGUI_VERSION_NUM >= 18000
 #define IMGUI_HAS_TEXTURES           // Added ImGuiBackendFlags_RendererHasTextures - from IMGUI_VERSION_NUM >= 19198
@@ -57,7 +67,7 @@ Index of this file:
 // [SECTION] Misc data structures (ImGuiInputTextCallbackData, ImGuiSizeCallbackData, ImGuiPayload)
 // [SECTION] Helpers (ImGuiOnceUponAFrame, ImGuiTextFilter, ImGuiTextBuffer, ImGuiStorage, ImGuiListClipper, Math Operators, ImColor)
 // [SECTION] Multi-Select API flags and structures (ImGuiMultiSelectFlags, ImGuiMultiSelectIO, ImGuiSelectionRequest, ImGuiSelectionBasicStorage, ImGuiSelectionExternalStorage)
-// [SECTION] Drawing API (ImDrawCallback, ImDrawCmd, ImDrawIdx, ImDrawVert, ImDrawChannel, ImDrawListSplitter, ImDrawFlags, ImDrawListFlags, ImDrawList, ImDrawData)
+// [SECTION] Drawing API (ImDrawCallback, ImDrawCmd, ImDrawIdx, ImDrawVert, ImDrawChannel, ImDrawListSplitter, ImDrawFlags, ImDrawList, ImDrawData)
 // [SECTION] Texture API (ImTextureFormat, ImTextureStatus, ImTextureRect, ImTextureData)
 // [SECTION] Font API (ImFontConfig, ImFontGlyph, ImFontGlyphRangesBuilder, ImFontAtlasFlags, ImFontAtlas, ImFontBaked, ImFont)
 // [SECTION] Viewports (ImGuiViewportFlags, ImGuiViewport)
@@ -135,6 +145,17 @@ extern "C"
 #define IM_MSVC_RUNTIME_CHECKS_OFF
 #define IM_MSVC_RUNTIME_CHECKS_RESTORE
 #endif // #if defined(_MSC_VER)&&!defined(__clang__)&&!defined(__INTEL_COMPILER)&&!defined(IMGUI_DEBUG_PARANOID)
+// Alternative to using a .natstepfilter file or other scripts in misc/debuggers/ to skip debug-stepping selected trivial functions.
+// If you get a compiler error or warning related to use, please report it to us!
+#if (defined(__clang__)&&(__clang_major__ >= 7))||(defined(__GNUC__)&&(__GNUC__>4 ||(__GNUC__ == 4 && __GNUC_MINOR__ >= 8)))
+#define IM_NODEBUGSTEP      [[gnu::artificial]]
+#else
+#if defined(_MSC_VER)&&(_MSC_VER >= 1915)
+#define IM_NODEBUGSTEP      __declspec(non_user_code)
+#else
+#define IM_NODEBUGSTEP
+#endif // #if defined(_MSC_VER)&&(_MSC_VER >= 1915)
+#endif // #if (defined(__clang__)&&(__clang_major__ >= 7))||(defined(__GNUC__)&&(__GNUC__>4 ||(__GNUC__ == 4 && __GNUC_MINOR__ >= 8)))
 // Warnings
 #ifdef _MSC_VER
 #pragma warning (push)
@@ -166,7 +187,7 @@ extern "C"
 typedef struct ImVec2_t ImVec2;
 typedef struct ImVec4_t ImVec4;
 typedef struct ImTextureRef_t ImTextureRef;
-typedef struct ImVector_ImGuiTextRange_t ImVector_ImGuiTextRange;
+typedef struct ImVector_ImGuiTextFilterItem_t ImVector_ImGuiTextFilterItem;
 typedef struct ImVector_char_t ImVector_char;
 typedef struct ImVector_ImGuiStoragePair_t ImVector_ImGuiStoragePair;
 typedef struct ImVector_ImGuiSelectionRequest_t ImVector_ImGuiSelectionRequest;
@@ -190,7 +211,8 @@ typedef struct ImVector_ImU16_t ImVector_ImU16;
 typedef struct ImVector_ImFontGlyph_t ImVector_ImFontGlyph;
 typedef struct ImVector_ImFontConfigPtr_t ImVector_ImFontConfigPtr;
 typedef struct ImVector_ImTextureDataPtr_t ImVector_ImTextureDataPtr;
-typedef struct ImGuiTextFilter_ImGuiTextRange_t ImGuiTextFilter_ImGuiTextRange;
+typedef struct ImGuiTextFilterItem_t ImGuiTextFilterItem;
+typedef struct ImSmallStack__ImDrawFlags_3_ImU16_t ImSmallStack__ImDrawFlags_3_ImU16;
 typedef struct ImDrawCmdHeader_t ImDrawCmdHeader;
 // ImDrawIdx: vertex index. [Compile-time configurable type]
 // - To use 16-bit indices + allow large meshes: backend need to set 'io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset' and handle ImDrawCmd::VtxOffset (recommended).
@@ -279,7 +301,6 @@ typedef int ImGuiTableBgTarget;   // -> enum ImGuiTableBgTarget_   // Enum: A co
 //   - In Visual Studio w/ Visual Assist installed: Alt+G ("VAssistX.GoToImplementation") can also follow symbols inside comments.
 //   - In VS Code, CLion, etc.: Ctrl+Click can follow symbols inside comments.
 typedef int ImDrawFlags;            // -> enum ImDrawFlags_          // Flags: for ImDrawList functions
-typedef int ImDrawListFlags;        // -> enum ImDrawListFlags_      // Flags: for ImDrawList instance
 typedef int ImDrawTextFlags;        // -> enum ImDrawTextFlags_      // Internal, do not use!
 typedef int ImFontFlags;            // -> enum ImFontFlags_          // Flags: for ImFont
 typedef int ImFontAtlasFlags;       // -> enum ImFontAtlasFlags_     // Flags: for ImFontAtlas
@@ -1068,7 +1089,7 @@ CIMGUI_API const ImGuiPayload* igAcceptDragDropPayload(const char* type, ImGuiDr
 CIMGUI_API void                igEndDragDropTarget(void);                                                          // only call EndDragDropTarget() if BeginDragDropTarget() returns true!
 CIMGUI_API const ImGuiPayload* igGetDragDropPayload(void);                                                         // peek directly into the current payload from anywhere. returns NULL when drag and drop is finished or inactive. use ImGuiPayload::IsDataType() to test for the payload type.
 
-// Disabling [BETA API]
+// Disabling
 // - Disable all user interactions and dim items visuals (applying style.DisabledAlpha over current colors)
 // - Those can be nested but it cannot be used to enable an already disabled section (a single BeginDisabled(true) in the stack is enough to keep everything disabled)
 // - Tooltips windows are automatically opted out of disabling. Note that IsItemHovered() by default returns false on disabled items, unless using ImGuiHoveredFlags_AllowWhenDisabled.
@@ -1341,6 +1362,17 @@ typedef enum
     ImGuiItemFlags_LiveEditOnInputText   = 1<<7,  // true     // InputText: apply keyboard edits to backing value while typing. Otherwise, edits are applied when validating, tabbing out or losing focus.
     ImGuiItemFlags_LiveEditOnInputScalar = 1<<8,  // false    // DragXXX, SliderXXX, InputScalar: apply keyboard edits to backing value while typing. Otherwise, edits are applied when validating, tabbing out or losing focus.
     ImGuiItemFlags_LiveEditOnInput       = ImGuiItemFlags_LiveEditOnInputText | ImGuiItemFlags_LiveEditOnInputScalar,
+
+    //---------------------------------------------------------------------------------
+    // [BETA] MixedValue mode used to represent a mixed/indeterminate state, typically for multi-selection.
+    // - Replace value display with "-" or a custom label.
+    // - Enter key validation apply an edit and return true even if value hasn't changed (in order to apply to all).
+    // - Supported by selected widgets: Checkbox, RadioButton, Sliders, Drags, Inputs, Combo.
+    // - Note: InputText-side Undo cannot be reliably combined with MixedValue + LiveEdit On:
+    //   - Both the initial edit and subsequent undo/revert will typically make your app code write to all backing objects.
+    //   - If you use MixedMode and the simplest solution is to ensure LiveEdit is off but widgets where this applies.
+    //---------------------------------------------------------------------------------
+    ImGuiItemFlags_MixedValue            = 1<<9,  // false    // [BETA] Represent a mixed/indeterminate value. Replace value label with "-" and apply edits on validation.
 } ImGuiItemFlags_;
 
 // Flags for ImGui::InputText()
@@ -2346,10 +2378,11 @@ struct ImGuiTableColumnSortSpecs_t
 CIMGUI_API void ImVector_Construct(void* vector);  // Construct a zero-size ImVector<> (of any type). This is primarily useful when calling ImFontGlyphRangesBuilder_BuildRanges()
 CIMGUI_API void ImVector_Destruct(void* vector);   // Destruct an ImVector<> (of any type). Important: Frees the vector memory but does not call destructors on contained objects (if they have them)
 
+CIMGUI_API const char* DearBindings_GetVersion(void);        // Get the Dear Bindings version which generated these bindings as a string.
+CIMGUI_API int         DearBindings_GetVersionNumber(void);  // Get the Dear Bindings version which generated these bindings as an integer.
+
 #if defined(IMGUI_HAS_IMSTR)
-#if IMGUI_HAS_IMSTR
-CIMGUI_API ImStr ImStr_FromCharStr(const char* b);  // Build an ImStr from a regular const char* (no data is copied, so you need to make sure the original char* isn't altered as long as you are using the ImStr).
-#endif // #if IMGUI_HAS_IMSTR
+CIMGUI_API ImStrv ImStrv_FromCharStr(const char* b);  // Build an ImStrv from a regular const char* (no data is copied, so you need to make sure the original char* isn't altered as long as you are using the ImStrv).
 #endif // #if defined(IMGUI_HAS_IMSTR)
 
 //-----------------------------------------------------------------------------
@@ -2386,7 +2419,7 @@ CIMGUI_API ImStr ImStr_FromCharStr(const char* b);  // Build an ImStr from a reg
 //-----------------------------------------------------------------------------
 
 IM_MSVC_RUNTIME_CHECKS_OFF
-struct ImVector_ImGuiTextRange_t { int Size; int Capacity; ImGuiTextFilter_ImGuiTextRange* Data; };  // Instantiation of ImVector<ImGuiTextRange>
+struct ImVector_ImGuiTextFilterItem_t { int Size; int Capacity; ImGuiTextFilterItem* Data; };  // Instantiation of ImVector<ImGuiTextFilterItem>
 struct ImVector_char_t { int Size; int Capacity; char* Data; };  // Instantiation of ImVector<char>
 struct ImVector_ImGuiStoragePair_t { int Size; int Capacity; ImGuiStoragePair* Data; };  // Instantiation of ImVector<ImGuiStoragePair>
 struct ImVector_ImGuiSelectionRequest_t { int Size; int Capacity; ImGuiSelectionRequest* Data; };  // Instantiation of ImVector<ImGuiSelectionRequest>
@@ -2488,10 +2521,12 @@ struct ImGuiStyle_t
     ImVec2             DisplayWindowPadding;              // Apply to regular windows: amount which we enforce to keep visible when moving near edges of your screen.
     ImVec2             DisplaySafeAreaPadding;            // Apply to every windows, menus, popups, tooltips: amount where we avoid displaying contents. Adjust if you cannot see the edges of your screen (e.g. on a TV where scaling has not been configured).
     float              MouseCursorScale;                  // Scale software rendered mouse cursor (when io.MouseDrawCursor is enabled). We apply per-monitor DPI scaling over this scale. May be removed later.
-    bool               AntiAliasedLines;                  // Enable anti-aliased lines/borders. Disable if you are really tight on CPU/GPU. Latched at the beginning of the frame (copied to ImDrawList).
-    bool               AntiAliasedLinesUseTex;            // Enable anti-aliased lines/borders using textures where possible. Require backend to render with bilinear filtering (NOT point/nearest filtering). Latched at the beginning of the frame (copied to ImDrawList).
-    bool               AntiAliasedFill;                   // Enable anti-aliased edges around filled shapes (rounded rectangles, circles, etc.). Disable if you are really tight on CPU/GPU. Latched at the beginning of the frame (copied to ImDrawList).
-    float              CurveTessellationTol;              // Tessellation tolerance when using PathBezierCurveTo() without a specific number of segments. Decrease for highly tessellated curves (higher quality, more polygons), increase to reduce quality.
+
+    // Rendering & Tessellation
+    bool               AntiAliasedLines;                  // Enable anti-aliased lines/borders. Used at the beginning of the frame to set ImDrawFlags_AALines in all draw-lists.
+    bool               AntiAliasedLineEnds;               // Enable anti-aliased lines/borders ends. Nicer for thick lines but more expensive. Used at the beginning of the frame to set ImDrawFlags_AALineEnds in all draw-lists.
+    bool               AntiAliasedFill;                   // Enable anti-aliased edges around filled shapes (rounded rectangles, circles, etc.). Used at the beginning of the frame to set ImDrawFlags_AAFill in all draw-lists.
+    float              CurveTessellationMaxError;         // Maximum error (in pixels) when using PathBezierCurveTo() without a specific number of segments. Decrease for highly tessellated curves (higher quality, more polygons), increase to reduce quality.
     float              CircleTessellationMaxError;        // Maximum error (in pixels) allowed when using AddCircle()/AddCircleFilled() or drawing rounded corner rectangles with no explicit segment count specified. Decrease for higher quality but more geometry.
 
     // Colors
@@ -2508,6 +2543,13 @@ struct ImGuiStyle_t
     // [Internal]
     float              _MainScale;                        // FIXME-WIP: Reference scale, as applied by ScaleAllSizes(). PLEASE DO NOT USE THIS FOR NOW.
     float              _NextFrameFontSizeBase;            // FIXME: Temporary hack until we finish remaining work.
+
+    // Obsolete names
+#ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+    bool               AntiAliasedLinesUseTex;            // [OBSOLETE] Enable anti-aliased lines/borders using textures for legacy strokes. Require backend to render with bilinear filtering (NOT point/nearest filtering). Latched at the beginning of the frame (copied to ImDrawList).
+    float              CurveTessellationTol;              // [OBSOLETE] Old CurveTessellationTol = New CurveTessellationMaxError*CurveTessellationMaxError. // Changed in 1.93.0
+    // TabMinWidthForCloseButton = TabCloseButtonMinWidthUnselected // Renamed in 1.91.9.
+#endif // #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 };
 CIMGUI_API void ImGuiStyle_ScaleAllSizes(ImGuiStyle* self, float scale_factor);  // Scale all spacing/padding/thickness values. Do not scale fonts. See comments in definition. Consider not calling this if your initial scale factor if <1.0.
 
@@ -2641,6 +2683,12 @@ struct ImGuiIO_t
     // - May facilitate interactions with a debugger when focus loss leads to clearing inputs data.
     // - Backends may have other side-effects on focus loss, so this will reduce side-effects but not necessary remove all of them.
     bool                ConfigDebugIgnoreFocusLoss;                     // = false          // Ignore io.AddFocusEvent(false), consequently not calling io.ClearInputKeys()/io.ClearInputMouse() in input processing.
+
+    // Option to compare < 1.93.0 rendering details vs 1.93.0 rendering details. (#9504)
+    // - Equivalent to calling PushDrawFlag(ImDrawFlags_StrokeLegacy,true) on every draw list instances.
+    // - Suggested use, e.g. io.ConfigDebugDrawListDefaultsToStrokeLegacy = io.KeyShift; // Map to SHIFT modifier
+    // - Also see our interactive testbed: https://www.dearimgui.com/docs/drawlist_v193
+    bool                ConfigDebugDrawListDefaultsToStrokeLegacy;      // false // Default all ImDrawList to ImDrawFlags_StrokeLegacy mode, mimicking pre-1.93.0 rendering.
 
     //------------------------------------------------------------------
     // Platform Identifiers
@@ -2850,26 +2898,26 @@ CIMGUI_API bool ImGuiPayload_IsDelivery(const ImGuiPayload* self);
 #define IM_UNICODE_CODEPOINT_MAX     0xFFFF      // Maximum Unicode code point supported by this build.
 #endif // #ifdef IMGUI_USE_WCHAR32
 
-// [Internal]
-struct ImGuiTextFilter_ImGuiTextRange_t
-{
-    const char* b;
-    const char* e;
-};
-CIMGUI_API bool ImGuiTextFilter_ImGuiTextRange_empty(const ImGuiTextFilter_ImGuiTextRange* self);
-CIMGUI_API void ImGuiTextFilter_ImGuiTextRange_split(const ImGuiTextFilter_ImGuiTextRange* self, char separator, ImVector_ImGuiTextRange* out);
-// Helper: Parse and apply text filters. In format "aaaaa[,bbbb][,ccccc]"
+// Helper: Parse and apply text filters e.g. 'aaa bbb' (all), 'aaa,bbb' (any), '-aaa' (exclude), '"Hello, world"' (exact sequence)
+typedef struct ImGuiTextFilterItem_t ImGuiTextFilterItem;
 struct ImGuiTextFilter_t
 {
-    char                    InputBuf[256];
-    ImVector_ImGuiTextRange Filters;
-    int                     CountGrep;
+    // Members
+    char                         InputBuf[256];  // User input buffer
+    int                          _CountExclude;  // [Internal] >= 0 count of leading exclude
+    ImVector_ImGuiTextFilterItem _Items;         // [Internal] Pre-parsed, trimmed, reordered items
 };
-CIMGUI_API bool ImGuiTextFilter_Draw(ImGuiTextFilter* self, const char* label /* = "Filter (inc,-exc)" */, float width /* = 0.0f */); // Helper calling InputText+Build
 CIMGUI_API bool ImGuiTextFilter_PassFilter(const ImGuiTextFilter* self, const char* text, const char* text_end /* = NULL */);
-CIMGUI_API void ImGuiTextFilter_Build(ImGuiTextFilter* self);
-CIMGUI_API void ImGuiTextFilter_Clear(ImGuiTextFilter* self);
-CIMGUI_API bool ImGuiTextFilter_IsActive(const ImGuiTextFilter* self);
+CIMGUI_API void ImGuiTextFilter_Build(ImGuiTextFilter* self);                                      // Update internal data when filter changes
+CIMGUI_API void ImGuiTextFilter_Clear(ImGuiTextFilter* self);                                      // Clear filter
+CIMGUI_API bool ImGuiTextFilter_IsActive(const ImGuiTextFilter* self);                             // Useful if you need e.g. an alternative code-path when there are no filters
+// Helper to call InputText() + Build() when buffer is changed.
+CIMGUI_API bool ImGuiTextFilter_Draw(ImGuiTextFilter* self, const char* label /* = "Filter" */);
+CIMGUI_API bool ImGuiTextFilter_DrawWithHint(ImGuiTextFilter* self);                               // Implied label = "Filter", hint = "incl -excl"
+CIMGUI_API bool ImGuiTextFilter_DrawWithHintEx(ImGuiTextFilter* self, const char* label /* = "Filter" */, const char* hint /* = "incl -excl" */);
+#ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+CIMGUI_API bool ImGuiTextFilter_DrawFloat(ImGuiTextFilter* self, const char* label, float width);
+#endif // #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 
 // Helper: Growable text buffer for logging/accumulating text
 // (this could be called 'ImGuiTextBuilder' / 'ImGuiStringBuilder')
@@ -2938,6 +2986,13 @@ CIMGUI_API void** ImGuiStorage_GetVoidPtrRef(ImGuiStorage* self, ImGuiID key, vo
 CIMGUI_API void   ImGuiStorage_BuildSortByKey(ImGuiStorage* self);
 // Obsolete: use on your own storage if you know only integer are being stored (open/close all tree nodes)
 CIMGUI_API void   ImGuiStorage_SetAllInt(ImGuiStorage* self, int val);
+
+// Instantiation of ImSmallStack_<ImDrawFlags, 3, ImU16>
+struct ImSmallStack__ImDrawFlags_3_ImU16_t
+{
+    ImDrawFlags LocalData[3];  // FIXME: should evolve into using heap, e.g union {} with T* HeapData + add SZ_T Capacity.
+    ImU16       Size /* = 0 */;
+};
 
 // Flags for ImGuiListClipper (currently not fully exposed in function calls: a future refactor will likely add this to ImGuiListClipper::Begin function equivalent)
 typedef enum
@@ -3187,14 +3242,10 @@ struct ImGuiSelectionExternalStorage_t
 CIMGUI_API void ImGuiSelectionExternalStorage_ApplyRequests(ImGuiSelectionExternalStorage* self, ImGuiMultiSelectIO* ms_io);  // Apply selection requests by using AdapterSetItemSelected() calls
 
 //-----------------------------------------------------------------------------
-// [SECTION] Drawing API (ImDrawCmd, ImDrawIdx, ImDrawVert, ImDrawChannel, ImDrawListSplitter, ImDrawListFlags, ImDrawList, ImDrawData)
+// [SECTION] Drawing API (ImDrawCmd, ImDrawIdx, ImDrawVert, ImDrawChannel, ImDrawListSplitter, ImDrawFlags, ImDrawList, ImDrawData)
 // Hold a series of drawing commands. The user provides a renderer for ImDrawData which essentially contains an array of ImDrawList.
 //-----------------------------------------------------------------------------
 
-// The maximum line width to bake anti-aliased textures for. Build atlas with ImFontAtlasFlags_NoBakedLines to disable baking.
-#ifndef IM_DRAWLIST_TEX_LINES_WIDTH_MAX
-#define IM_DRAWLIST_TEX_LINES_WIDTH_MAX     (32)
-#endif // #ifndef IM_DRAWLIST_TEX_LINES_WIDTH_MAX
 // ImDrawCallback: Draw callbacks for advanced uses [configurable type: override in imconfig.h]
 // NB: You most likely do NOT need to use draw callbacks just to create your own widget or customized UI rendering,
 // you can poke into the draw list for that! Draw callback may be useful for example to:
@@ -3273,41 +3324,83 @@ CIMGUI_API void ImDrawListSplitter_SetCurrentChannel(ImDrawListSplitter* self, I
 // Flags for ImDrawList functions
 typedef enum
 {
-    ImDrawFlags_None                    = 0,
+    ImDrawFlags_None                     = 0,
+    //ImDrawFlags_Closed                = 1,        // -> FLAG MOVED BELOW. Prior to 1.92.8 (May 2026): ImDrawFlags_Closed was guaranteed to be == (1<<0) == 1, for legacy compatibility reason. Hardcoded use of 1 or true should be replaced with 'ImDrawFlags_Closed'.
 
-    // Rounding for AddRect(), AddRectFilled(), PathRect()
-    // - When not specified, we defaults to ImDrawFlags_RoundCornersAll! So you only need to use those flags if you want another configuration.
-    ImDrawFlags_RoundCornersTopLeft     = 1<<4,                         // Round top-left corner only (when rounding > 0.0f, we default to all corners).
-    ImDrawFlags_RoundCornersTopRight    = 1<<5,                         // Round top-right corner only (when rounding > 0.0f, we default to all corners).
-    ImDrawFlags_RoundCornersBottomLeft  = 1<<6,                         // Round bottom-left corner only (when rounding > 0.0f, we default to all corners).
-    ImDrawFlags_RoundCornersBottomRight = 1<<7,                         // Round bottom-right corner only (when rounding > 0.0f, we default to all corners).
-    ImDrawFlags_RoundCornersNone        = 1<<8,                         // Disable rounding even if `float rounding > 0.0f`. This is NOT zero, NOT an implicit flag!
-    ImDrawFlags_RoundCornersAll         = ImDrawFlags_RoundCornersTopLeft | ImDrawFlags_RoundCornersTopRight | ImDrawFlags_RoundCornersBottomLeft | ImDrawFlags_RoundCornersBottomRight, // (Default!!)
-    ImDrawFlags_RoundCornersDefault_    = ImDrawFlags_RoundCornersAll,  // Default to ALL corners if none of the _RoundCornersXX flags are specified!
-    ImDrawFlags_RoundCornersTop         = ImDrawFlags_RoundCornersTopLeft | ImDrawFlags_RoundCornersTopRight,
-    ImDrawFlags_RoundCornersBottom      = ImDrawFlags_RoundCornersBottomLeft | ImDrawFlags_RoundCornersBottomRight,
-    ImDrawFlags_RoundCornersLeft        = ImDrawFlags_RoundCornersBottomLeft | ImDrawFlags_RoundCornersTopLeft,
-    ImDrawFlags_RoundCornersRight       = ImDrawFlags_RoundCornersBottomRight | ImDrawFlags_RoundCornersTopRight,
-    ImDrawFlags_RoundCornersMask_       = ImDrawFlags_RoundCornersAll | ImDrawFlags_RoundCornersNone,
+    // About usage of flags:
+    // - "Prim" column:  'OK' = flag can be used to configure an individual AddXXX() call.
+    // - "Scope" column: 'OK' = initialized by ImGui based on Style options (e.g. whether anti-aliased is enabled) + may be modified using ImDrawList::PushDrawFlag().
+    //                          OK(0)/OK(1) indicates whether this flag is set in the default ImGui Style settings.
 
-    // Stroke options
-    ImDrawFlags_Closed                  = 1<<9,                         // PathStroke(), AddPolyline(): specify that shape should be closed.
-    //ImDrawFlags_Closed                    = 1,      // Prior to 1.92.8 (May 2026), ImDrawFlags_Closed was guaranteed to be == 1<<0 == 1 for legacy compatibility reason. Hardcoded use of 1 or true should be replaced.
+    // - Rounding default to ImDrawFlags_RoundAll when 'rounding > 0'.
+    // - So you only need to use the ImDrawFlags_RoundXXX flags if you want a special configuration (e.g. a rectangle with one rounded corner).
+    // Rounding for AddRectXXX(), PathRect() ------ // Prim/Scope?
+    ImDrawFlags_RoundTopLeft             = 1<<4,                                          // OK   --    // Round top-left corner only (when 'rounding > 0.0f', we default to all corners).
+    ImDrawFlags_RoundTopRight            = 1<<5,                                          // OK   --    // Round top-right corner only (when 'rounding > 0.0f', we default to all corners).
+    ImDrawFlags_RoundBottomLeft          = 1<<6,                                          // OK   --    // Round bottom-left corner only (when 'rounding > 0.0f', we default to all corners).
+    ImDrawFlags_RoundBottomRight         = 1<<7,                                          // OK   --    // Round bottom-right corner only (when 'rounding > 0.0f', we default to all corners).
+    ImDrawFlags_RoundNone                = 1<<8,                                          // OK   --    // Disable rounding even when 'rounding > 0.0f'. This value is NOT zero, it is NOT an implicit flag!
+    ImDrawFlags_RoundAll                 = ImDrawFlags_RoundTopLeft | ImDrawFlags_RoundTopRight | ImDrawFlags_RoundBottomLeft | ImDrawFlags_RoundBottomRight, // (Default!!)
+    ImDrawFlags_RoundTop                 = ImDrawFlags_RoundTopLeft | ImDrawFlags_RoundTopRight,
+    ImDrawFlags_RoundBottom              = ImDrawFlags_RoundBottomLeft | ImDrawFlags_RoundBottomRight,
+    ImDrawFlags_RoundLeft                = ImDrawFlags_RoundBottomLeft | ImDrawFlags_RoundTopLeft,
+    ImDrawFlags_RoundRight               = ImDrawFlags_RoundBottomRight | ImDrawFlags_RoundTopRight,
 
-    ImDrawFlags_InvalidMask_            = ~0x7FFFFFF0,                  // == 0x8000000F,
+    // Stroke Options ----------------------------- // Prim/Scope?
+    ImDrawFlags_Closed                   = 1<<9,                                          // OK   --     // PathStroke(), AddPolyline(): specify that shape should be closed.
+    ImDrawFlags_JoinMiter                = 1<<10,                                         // OK   --     // PathStroke(), AddPolyline(): use miter joins/corners only. This assumes that the input polyline does not have corners sharper than 90 degrees. Slightly faster.
+    ImDrawFlags_CapSquare                = 1<<11,                                         // OK   --     // PathStroke(), AddPolyline(): use square cap line ends.
+
+    // About Stroke Ends:
+    // - Rendering is optimized for fast pixel-perfect UI, so line ends are not anti-aliased by default. It's cheaper (we can emit less vertices).
+    // - For more free-form drawings, light graphs and markers, or when using thick strokes: you can turn them on using the ImDrawFlags_AALineEnds flag.
+    // - See 'Demo->Examples->Custom Rendering' to interactively toy with those flags.
+    // - 'OK*' indicates using this at the AddXXX() call site is unlikely: it would only makes sense if (1) the option is disabled in style/scope and (2) you want to forcefully enable it for a single primitives. Possible but unlikely! Only supported for functions taking flags inputs.
+    // Stroke/Fill Anti-aliasing ------------------ // Prim/Scope?
+    ImDrawFlags_AAFill                   = 1<<12,                                         // OK*  OK(1)  // Enable anti-aliasing for Filled shapes.
+    ImDrawFlags_AALines                  = 1<<13,                                         // OK*  OK(1)  // Enable anti-aliasing for Strokes (lines, borders).
+    ImDrawFlags_AALineEnds               = 1<<14,                                         // OK   OK(0)  // Enable anti-aliasing for Strokes Ends. Requires AALines to also be enabled. Useful on thick strokes or for precise continuity of multiple lines. A little more costly.
+    //ImDrawFlags_NoAA                  = 1 << 15,  // OK   --     // Disable anti-aliasing for a given primitive.
+    //ImDrawFlags_NoAALineEnds          = 1 << 16,  // OK   --     // Disable anti-aliasing ends for a given primitive.
+
+    // About Stroke Position:
+    // - Read https://github.com/ocornut/imgui/wiki/Draw-List (this guide includes a precise list of differences between 1.92.9 and 1.93.0)
+    // - Read https://github.com/ocornut/imgui/wiki/Pixel-Perfect-Rendering
+    // Stroke Position relative to shape outline -- // Prim/Scope?
+    ImDrawFlags_StrokeInside             = 1<<17,                                         // OK   --     // Draw stroke inside of the shape outline (default for closed shapes and AddLineH, AddLineV functions)
+    ImDrawFlags_StrokeCenter             = 2<<17,                                         // OK   --     // Draw stroke at the center of the shape outline (default for paths, bezier, and AddLine functions)
+    ImDrawFlags_StrokeCenterBiased       = 3<<17,                                         // OK   --     // Draw stroke at the center of the shape outline, so that half thickness rounded down will be outside, and the rest inside the shape outline. Useful for axis-aligned shapes: AddLineH, AddLineV, AddRect. Does not animate well!
+    ImDrawFlags_StrokeOutside            = 4<<17,                                         // OK   --     // Draw stroke outside of the shape outline
+    ImDrawFlags_StrokeLegacy             = 7<<17,                                         // OK   OK(0)  // Use legacy positioning + enable JoinMiter + disable AALineEnds. Must be all bits set.
+
+    // Other Options ------------------------------ // Prim/Scope?
+    ImDrawFlags_TextNoPixelSnap          = 1<<20,                                         // OK   OK(0)  // Disable automatically snapping AddText() calls to pixel boundaries.
+    ImDrawFlags_UseTexForRoundCorners    = 1<<21,                                         // --   OK(1)  // Enable using textures instead of strokes to draw rounded corners/circles where possible (faster). Used by default unless 'ImFontAtlasFlags_NoBakedRoundCorners' is enabled in the font atlas.
+    ImDrawFlags_UseVtxOffset             = 1<<22,                                         // --   OK(1)  // Can emit 'VtxOffset > 0' to allow large meshes with 16-bit ImDrawIdx. Used by default when 'ImGuiBackendFlags_RendererHasVtxOffset' is enabled by the backend.
+    ImDrawFlags_AllowTexForRoundCorners_ = 1<<23,                                         // --   OK(1)  // [Internal]
+
+    // [Internal]
+    ImDrawFlags_RoundMask_               = ImDrawFlags_RoundAll | ImDrawFlags_RoundNone,  // [Internal]
+    ImDrawFlags_AllowInPushScope_        = ImDrawFlags_AAFill | ImDrawFlags_AALines | ImDrawFlags_AALineEnds | ImDrawFlags_StrokeLegacy | ImDrawFlags_TextNoPixelSnap | ImDrawFlags_UseTexForRoundCorners | ImDrawFlags_UseVtxOffset | ImDrawFlags_RoundMask_, // [Internal] Values allowed in PushDrawFlag() scope.
+    ImDrawFlags_AllowInFrameScope_       = ImDrawFlags_AllowInPushScope_ | ImDrawFlags_AllowTexForRoundCorners_,
+    ImDrawFlags_StrokeMask_              = 0x07<<17,                                      // [Internal]
+    ImDrawFlags_InvalidMask_             = ~0x7FFFFFF0,                                   // [Internal] == 0x8000000F. Reserved to detect misuses.
+
+    // Obsolete names
+#ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+    // RENAMED in 1.93.0 (Oct 2026): ImDrawFlags_RoundCornersXXXX -> ImDrawFlags_RoundXXXX.
+    ImDrawFlags_RoundCornersTopLeft      = ImDrawFlags_RoundTopLeft,
+    ImDrawFlags_RoundCornersTopRight     = ImDrawFlags_RoundTopRight,
+    ImDrawFlags_RoundCornersBottomLeft   = ImDrawFlags_RoundBottomLeft,
+    ImDrawFlags_RoundCornersBottomRight  = ImDrawFlags_RoundBottomRight,
+    ImDrawFlags_RoundCornersNone         = ImDrawFlags_RoundNone,
+    ImDrawFlags_RoundCornersAll          = ImDrawFlags_RoundAll,
+    ImDrawFlags_RoundCornersTop          = ImDrawFlags_RoundTop,
+    ImDrawFlags_RoundCornersBottom       = ImDrawFlags_RoundBottom,
+    ImDrawFlags_RoundCornersLeft         = ImDrawFlags_RoundLeft,
+    ImDrawFlags_RoundCornersRight        = ImDrawFlags_RoundRight,
+#endif // #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 } ImDrawFlags_;
-
-// Flags for ImDrawList instance. Those are set automatically by ImGui:: functions from ImGuiIO settings, and generally not manipulated directly.
-// It is however possible to temporarily alter flags between calls to ImDrawList:: functions.
-typedef enum
-{
-    ImDrawListFlags_None                   = 0,
-    ImDrawListFlags_AntiAliasedLines       = 1<<0,  // Enable anti-aliased lines/borders (*2 the number of triangles for 1.0f wide line or lines thin enough to be drawn using textures, otherwise *3 the number of triangles)
-    ImDrawListFlags_AntiAliasedLinesUseTex = 1<<1,  // Enable anti-aliased lines/borders using textures when possible. Require backend to render with bilinear filtering (NOT point/nearest filtering).
-    ImDrawListFlags_AntiAliasedFill        = 1<<2,  // Enable anti-aliased edge around filled shapes (rounded rectangles, circles).
-    ImDrawListFlags_AllowVtxOffset         = 1<<3,  // Can emit 'VtxOffset > 0' to allow large meshes. Set when 'ImGuiBackendFlags_RendererHasVtxOffset' is enabled.
-    ImDrawListFlags_TextNoPixelSnap        = 1<<4,  // Disable automatically snapping AddText() calls to pixel boundaries.
-} ImDrawListFlags_;
 
 // Draw command list
 // This is the low-level list of polygons that ImGui:: functions are filling. At the end of the frame,
@@ -3321,24 +3414,27 @@ typedef enum
 struct ImDrawList_t
 {
     // This is what you have to render
-    ImVector_ImDrawCmd    CmdBuffer;          // Draw commands. Typically 1 command = 1 GPU draw call, unless the command is a callback.
-    ImVector_ImDrawIdx    IdxBuffer;          // Index buffer. Each command consume ImDrawCmd::ElemCount of those
-    ImVector_ImDrawVert   VtxBuffer;          // Vertex buffer.
-    ImDrawListFlags       Flags;              // Flags, you may poke into these to adjust anti-aliasing settings per-primitive.
+    ImVector_ImDrawCmd                CmdBuffer;              // Draw commands. Typically 1 command = 1 GPU draw call, unless the command is a callback.
+    ImVector_ImDrawIdx                IdxBuffer;              // Index buffer. Each command consume ImDrawCmd::ElemCount of those
+    ImVector_ImDrawVert               VtxBuffer;              // Vertex buffer.
+    ImDrawFlags                       Flags;                  // Current flags for drawing primitives.  Alter with PushDrawFlag()/PopDrawFlags() to adjust defaults to a given scope.
 
     // [Internal, used while building lists]
-    unsigned int          _VtxCurrentIdx;     // [Internal] generally == VtxBuffer.Size unless we are past 64K vertices, in which case this gets reset to 0.
-    ImDrawListSharedData* _Data;              // Pointer to shared draw data (you can use ImGui::GetDrawListSharedData() to get the one from current ImGui context)
-    ImDrawVert*           _VtxWritePtr;       // [Internal] point within VtxBuffer.Data after each add command (to avoid using the ImVector<> operators too much)
-    ImDrawIdx*            _IdxWritePtr;       // [Internal] point within IdxBuffer.Data after each add command (to avoid using the ImVector<> operators too much)
-    ImVector_ImVec2       _Path;              // [Internal] current path building
-    ImDrawCmdHeader       _CmdHeader;         // [Internal] template of active commands. Fields should match those of CmdBuffer.back().
-    ImDrawListSplitter    _Splitter;          // [Internal] for channels api (note: prefer using your own persistent instance of ImDrawListSplitter!)
-    ImVector_ImVec4       _ClipRectStack;     // [Internal]
-    ImVector_ImTextureRef _TextureStack;      // [Internal]
-    ImVector_ImU8         _CallbacksDataBuf;  // [Internal]
-    float                 _FringeScale;       // [Internal] anti-alias fringe is scaled by this value, this helps to keep things sharp while zooming at vertex buffer content
-    const char*           _OwnerName;         // Pointer to owner window's name for debugging
+    unsigned int                      _VtxCurrentIdx;         // [Internal] generally == VtxBuffer.Size unless we are past 64K vertices, in which case this gets reset to 0.
+    ImDrawListSharedData*             _Data;                  // Pointer to shared draw data (you can use ImGui::GetDrawListSharedData() to get the one from current ImGui context)
+    ImDrawVert*                       _VtxWritePtr;           // [Internal] point within VtxBuffer.Data after each add command (to avoid using the ImVector<> operators too much)
+    ImDrawIdx*                        _IdxWritePtr;           // [Internal] point within IdxBuffer.Data after each add command (to avoid using the ImVector<> operators too much)
+    ImVector_ImVec2                   _Path;                  // [Internal] current path building
+    ImDrawCmdHeader                   _CmdHeader;             // [Internal] template of active commands. Fields should match those of CmdBuffer.back().
+    ImDrawListSplitter                _Splitter;              // [Internal] for channels api (note: prefer using your own persistent instance of ImDrawListSplitter!)
+    ImVector_ImVec4                   _ClipRectStack;         // [Internal]
+    ImVector_ImTextureRef             _TextureStack;          // [Internal]
+    ImVector_ImU8                     _CallbacksDataBuf;      // [Internal]
+    ImSmallStack__ImDrawFlags_3_ImU16 _DrawFlagsStack;        // [Internal]
+    float                             _FringeScale;           // [Internal] anti-alias fringe is scaled by this value, this helps to keep things sharp while zooming at vertex buffer content
+    float                             _InvFringeScale;        // [internal] 1.0 / _FringeScale // FIXME: Consider renaming to _PixelDensity.
+    bool                              _FringeScaleIsInteger;  // [Internal] true if 1/_FringeScale is a whole number, used to select fast path for rendering
+    const char*                       _OwnerName;             // Pointer to owner window's name for debugging
 
     //inline  void  AddEllipse(const ImVec2& center, float radius_x, float radius_y, ImU32 col, float rot = 0.0f, int num_segments = 0, float thickness = 1.0f) { AddEllipse(center, ImVec2(radius_x, radius_y), col, rot, num_segments, thickness); } // OBSOLETED in 1.90.5 (Mar 2024)
     //inline  void  AddEllipseFilled(const ImVec2& center, float radius_x, float radius_y, ImU32 col, float rot = 0.0f, int num_segments = 0) { AddEllipseFilled(center, ImVec2(radius_x, radius_y), col, rot, num_segments); }                        // OBSOLETED in 1.90.5 (Mar 2024)
@@ -3346,11 +3442,13 @@ struct ImDrawList_t
     //inline  void  AddBezierCurve(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, const ImVec2& p4, ImU32 col, float thickness, int num_segments = 0) { AddBezierCubic(p1, p2, p3, p4, col, thickness, num_segments); }                         // OBSOLETED in 1.80 (Jan 2021)
     //inline  void  PathBezierCurveTo(const ImVec2& p2, const ImVec2& p3, const ImVec2& p4, int num_segments = 0) { PathBezierCubicCurveTo(p2, p3, p4, num_segments); }                                                                                // OBSOLETED in 1.80 (Jan 2021)
 };
-CIMGUI_API void        ImDrawList_PushClipRect(ImDrawList* self, ImVec2 clip_rect_min, ImVec2 clip_rect_max, bool intersect_with_current_clip_rect /* = false */); // Render-level scissoring. This is passed down to your render function but not used for CPU-side coarse clipping. Prefer using higher-level ImGui::PushClipRect() to affect logic (hit-testing and widget culling)
+CIMGUI_API void        ImDrawList_PushClipRect(ImDrawList* self, ImVec2 clip_rect_min, ImVec2 clip_rect_max, bool intersect_with_current_clip_rect /* = false */);     // Render-level scissoring. This is passed down to your render function but not used for CPU-side coarse clipping. Prefer using higher-level ImGui::PushClipRect() to affect logic (hit-testing and widget culling)
 CIMGUI_API void        ImDrawList_PushClipRectFullScreen(ImDrawList* self);
 CIMGUI_API void        ImDrawList_PopClipRect(ImDrawList* self);
 CIMGUI_API void        ImDrawList_PushTexture(ImDrawList* self, ImTextureRef tex_ref);
 CIMGUI_API void        ImDrawList_PopTexture(ImDrawList* self);
+CIMGUI_API void        ImDrawList_PushDrawFlag(ImDrawList* self, ImDrawFlags flags, bool enabled);                                                                     // [BETA] Please notify me if you are using this.
+CIMGUI_API void        ImDrawList_PopDrawFlag(ImDrawList* self);
 CIMGUI_API ImVec2      ImDrawList_GetClipRectMin(const ImDrawList* self);
 CIMGUI_API ImVec2      ImDrawList_GetClipRectMax(const ImDrawList* self);
 // Primitives
@@ -3360,52 +3458,52 @@ CIMGUI_API ImVec2      ImDrawList_GetClipRectMax(const ImDrawList* self);
 //   In older versions (until Dear ImGui 1.77) the AddCircle functions defaulted to num_segments == 12.
 //   In future versions we will use textures to provide cheaper and higher-quality circles.
 //   Use AddNgon() and AddNgonFilled() functions if you need to guarantee a specific number of sides.
-CIMGUI_API void        ImDrawList_AddLine(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImU32 col);                                                                     // Implied thickness = 1.0f
-CIMGUI_API void        ImDrawList_AddLineEx(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImU32 col, float thickness /* = 1.0f */);
-CIMGUI_API void        ImDrawList_AddLineH(ImDrawList* self, float min_x, float max_x, float y, ImU32 col);                                                       // Implied thickness = 1.0f
-CIMGUI_API void        ImDrawList_AddLineHEx(ImDrawList* self, float min_x, float max_x, float y, ImU32 col, float thickness /* = 1.0f */);
-CIMGUI_API void        ImDrawList_AddLineV(ImDrawList* self, float x, float min_y, float max_y, ImU32 col);                                                       // Implied thickness = 1.0f
-CIMGUI_API void        ImDrawList_AddLineVEx(ImDrawList* self, float x, float min_y, float max_y, ImU32 col, float thickness /* = 1.0f */);
-CIMGUI_API void        ImDrawList_AddRect(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col);                                                               // Implied rounding = 0.0f, thickness = 1.0f, flags = 0
+CIMGUI_API void        ImDrawList_AddLine(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImU32 col);                                                                          // Implied thickness = 1.0f, flags = 0
+CIMGUI_API void        ImDrawList_AddLineEx(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImU32 col, float thickness /* = 1.0f */, ImDrawFlags flags /* = 0 */);
+CIMGUI_API void        ImDrawList_AddLineH(ImDrawList* self, float min_x, float max_x, float y, ImU32 col);                                                            // Implied thickness = 1.0f, flags = 0
+CIMGUI_API void        ImDrawList_AddLineHEx(ImDrawList* self, float min_x, float max_x, float y, ImU32 col, float thickness /* = 1.0f */, ImDrawFlags flags /* = 0 */);
+CIMGUI_API void        ImDrawList_AddLineV(ImDrawList* self, float x, float min_y, float max_y, ImU32 col);                                                            // Implied thickness = 1.0f, flags = 0
+CIMGUI_API void        ImDrawList_AddLineVEx(ImDrawList* self, float x, float min_y, float max_y, ImU32 col, float thickness /* = 1.0f */, ImDrawFlags flags /* = 0 */);
+CIMGUI_API void        ImDrawList_AddRect(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col);                                                                    // Implied rounding = 0.0f, thickness = 1.0f, flags = 0
 CIMGUI_API void        ImDrawList_AddRectEx(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col, float rounding /* = 0.0f */, float thickness /* = 1.0f */, ImDrawFlags flags /* = 0 */); // a: upper-left, b: lower-right (== upper-left + size)
-CIMGUI_API void        ImDrawList_AddRectFilled(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col);                                                         // Implied rounding = 0.0f, flags = 0
-CIMGUI_API void        ImDrawList_AddRectFilledEx(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col, float rounding /* = 0.0f */, ImDrawFlags flags /* = 0 */); // a: upper-left, b: lower-right (== upper-left + size)
+CIMGUI_API void        ImDrawList_AddRectFilled(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col);                                                              // Implied rounding = 0.0f, flags = 0
+CIMGUI_API void        ImDrawList_AddRectFilledEx(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col, float rounding /* = 0.0f */, ImDrawFlags flags /* = 0 */);  // a: upper-left, b: lower-right (== upper-left + size)
 CIMGUI_API void        ImDrawList_AddRectFilledMultiColor(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col_upr_left, ImU32 col_upr_right, ImU32 col_bot_right, ImU32 col_bot_left);
-CIMGUI_API void        ImDrawList_AddQuad(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImVec2 p4, ImU32 col);                                               // Implied thickness = 1.0f
-CIMGUI_API void        ImDrawList_AddQuadEx(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImVec2 p4, ImU32 col, float thickness /* = 1.0f */);
+CIMGUI_API void        ImDrawList_AddQuad(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImVec2 p4, ImU32 col);                                                    // Implied thickness = 1.0f, flags = 0
+CIMGUI_API void        ImDrawList_AddQuadEx(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImVec2 p4, ImU32 col, float thickness /* = 1.0f */, ImDrawFlags flags /* = 0 */);
 CIMGUI_API void        ImDrawList_AddQuadFilled(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImVec2 p4, ImU32 col);
-CIMGUI_API void        ImDrawList_AddTriangle(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImU32 col);                                                      // Implied thickness = 1.0f
-CIMGUI_API void        ImDrawList_AddTriangleEx(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImU32 col, float thickness /* = 1.0f */);
+CIMGUI_API void        ImDrawList_AddTriangle(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImU32 col);                                                           // Implied thickness = 1.0f, flags = 0
+CIMGUI_API void        ImDrawList_AddTriangleEx(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImU32 col, float thickness /* = 1.0f */, ImDrawFlags flags /* = 0 */);
 CIMGUI_API void        ImDrawList_AddTriangleFilled(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImU32 col);
-CIMGUI_API void        ImDrawList_AddCircle(ImDrawList* self, ImVec2 center, float radius, ImU32 col);                                                            // Implied num_segments = 0, thickness = 1.0f
-CIMGUI_API void        ImDrawList_AddCircleEx(ImDrawList* self, ImVec2 center, float radius, ImU32 col, int num_segments /* = 0 */, float thickness /* = 1.0f */);
+CIMGUI_API void        ImDrawList_AddCircle(ImDrawList* self, ImVec2 center, float radius, ImU32 col);                                                                 // Implied num_segments = 0, thickness = 1.0f, flags = 0
+CIMGUI_API void        ImDrawList_AddCircleEx(ImDrawList* self, ImVec2 center, float radius, ImU32 col, int num_segments /* = 0 */, float thickness /* = 1.0f */, ImDrawFlags flags /* = 0 */);
 CIMGUI_API void        ImDrawList_AddCircleFilled(ImDrawList* self, ImVec2 center, float radius, ImU32 col, int num_segments /* = 0 */);
-CIMGUI_API void        ImDrawList_AddNgon(ImDrawList* self, ImVec2 center, float radius, ImU32 col, int num_segments);                                            // Implied thickness = 1.0f
-CIMGUI_API void        ImDrawList_AddNgonEx(ImDrawList* self, ImVec2 center, float radius, ImU32 col, int num_segments, float thickness /* = 1.0f */);
+CIMGUI_API void        ImDrawList_AddNgon(ImDrawList* self, ImVec2 center, float radius, ImU32 col, int num_segments);                                                 // Implied thickness = 1.0f, flags = 0
+CIMGUI_API void        ImDrawList_AddNgonEx(ImDrawList* self, ImVec2 center, float radius, ImU32 col, int num_segments, float thickness /* = 1.0f */, ImDrawFlags flags /* = 0 */);
 CIMGUI_API void        ImDrawList_AddNgonFilled(ImDrawList* self, ImVec2 center, float radius, ImU32 col, int num_segments);
-CIMGUI_API void        ImDrawList_AddEllipse(ImDrawList* self, ImVec2 center, ImVec2 radius, ImU32 col);                                                          // Implied rot = 0.0f, num_segments = 0, thickness = 1.0f
-CIMGUI_API void        ImDrawList_AddEllipseEx(ImDrawList* self, ImVec2 center, ImVec2 radius, ImU32 col, float rot /* = 0.0f */, int num_segments /* = 0 */, float thickness /* = 1.0f */);
-CIMGUI_API void        ImDrawList_AddEllipseFilled(ImDrawList* self, ImVec2 center, ImVec2 radius, ImU32 col);                                                    // Implied rot = 0.0f, num_segments = 0
+CIMGUI_API void        ImDrawList_AddEllipse(ImDrawList* self, ImVec2 center, ImVec2 radius, ImU32 col);                                                               // Implied rot = 0.0f, num_segments = 0, thickness = 1.0f, flags = 0
+CIMGUI_API void        ImDrawList_AddEllipseEx(ImDrawList* self, ImVec2 center, ImVec2 radius, ImU32 col, float rot /* = 0.0f */, int num_segments /* = 0 */, float thickness /* = 1.0f */, ImDrawFlags flags /* = 0 */);
+CIMGUI_API void        ImDrawList_AddEllipseFilled(ImDrawList* self, ImVec2 center, ImVec2 radius, ImU32 col);                                                         // Implied rot = 0.0f, num_segments = 0
 CIMGUI_API void        ImDrawList_AddEllipseFilledEx(ImDrawList* self, ImVec2 center, ImVec2 radius, ImU32 col, float rot /* = 0.0f */, int num_segments /* = 0 */);
-CIMGUI_API void        ImDrawList_AddText(ImDrawList* self, ImVec2 pos, ImU32 col, const char* text_begin);                                                       // Implied text_end = NULL
+CIMGUI_API void        ImDrawList_AddText(ImDrawList* self, ImVec2 pos, ImU32 col, const char* text_begin);                                                            // Implied text_end = NULL
 CIMGUI_API void        ImDrawList_AddTextEx(ImDrawList* self, ImVec2 pos, ImU32 col, const char* text_begin, const char* text_end /* = NULL */);
-CIMGUI_API void        ImDrawList_AddTextImFontPtr(ImDrawList* self, ImFont* font, float font_size, ImVec2 pos, ImU32 col, const char* text_begin);               // Implied text_end = NULL, wrap_width = 0.0f, cpu_fine_clip_rect = NULL
+CIMGUI_API void        ImDrawList_AddTextImFontPtr(ImDrawList* self, ImFont* font, float font_size, ImVec2 pos, ImU32 col, const char* text_begin);                    // Implied text_end = NULL, wrap_width = 0.0f, cpu_fine_clip_rect = NULL
 CIMGUI_API void        ImDrawList_AddTextImFontPtrEx(ImDrawList* self, ImFont* font, float font_size, ImVec2 pos, ImU32 col, const char* text_begin, const char* text_end /* = NULL */, float wrap_width /* = 0.0f */, const ImVec4* cpu_fine_clip_rect /* = NULL */);
-CIMGUI_API void        ImDrawList_AddBezierCubic(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImVec2 p4, ImU32 col, float thickness, int num_segments /* = 0 */); // Cubic Bezier (4 control points)
-CIMGUI_API void        ImDrawList_AddBezierQuadratic(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImU32 col, float thickness, int num_segments /* = 0 */);  // Quadratic Bezier (3 control points)
+CIMGUI_API void        ImDrawList_AddBezierCubic(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImVec2 p4, ImU32 col, float thickness, int num_segments /* = 0 */, ImDrawFlags flags /* = 0 */); // Cubic Bezier (4 control points)
+CIMGUI_API void        ImDrawList_AddBezierQuadratic(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImU32 col, float thickness, int num_segments /* = 0 */, ImDrawFlags flags /* = 0 */); // Quadratic Bezier (3 control points)
 // General polygon
 // - Only simple polygons are supported by filling functions (no self-intersections, no holes).
 // - Concave polygon fill is more expensive than convex one: it has O(N^2) complexity. Provided as a convenience for the user but not used by the main library.
 CIMGUI_API void        ImDrawList_AddPolyline(ImDrawList* self, const ImVec2* points, int num_points, ImU32 col, float thickness, ImDrawFlags flags /* = 0 */);
-CIMGUI_API void        ImDrawList_AddConvexPolyFilled(ImDrawList* self, const ImVec2* points, int num_points, ImU32 col);
+CIMGUI_API void        ImDrawList_AddConvexPolyFilled(ImDrawList* self, const ImVec2* points, int num_points, ImU32 col, ImDrawFlags flags /* = 0 */);
 CIMGUI_API void        ImDrawList_AddConcavePolyFilled(ImDrawList* self, const ImVec2* points, int num_points, ImU32 col);
 // Image primitives
 // - Read FAQ to understand what ImTextureID/ImTextureRef are.
 // - "p_min" and "p_max" represent the upper-left and lower-right corners of the rectangle.
 // - "uv_min" and "uv_max" represent the normalized texture coordinates to use for those corners. Using (0,0)->(1,1) texture coordinates will generally display the entire texture.
-CIMGUI_API void        ImDrawList_AddImage(ImDrawList* self, ImTextureRef tex_ref, ImVec2 p_min, ImVec2 p_max);                                                   // Implied uv_min = ImVec2(0, 0), uv_max = ImVec2(1, 1), col = IM_COL32_WHITE
+CIMGUI_API void        ImDrawList_AddImage(ImDrawList* self, ImTextureRef tex_ref, ImVec2 p_min, ImVec2 p_max);                                                        // Implied uv_min = ImVec2(0, 0), uv_max = ImVec2(1, 1), col = IM_COL32_WHITE
 CIMGUI_API void        ImDrawList_AddImageEx(ImDrawList* self, ImTextureRef tex_ref, ImVec2 p_min, ImVec2 p_max, ImVec2 uv_min /* = ImVec2(0, 0) */, ImVec2 uv_max /* = ImVec2(1, 1) */, ImU32 col /* = IM_COL32_WHITE */);
-CIMGUI_API void        ImDrawList_AddImageQuad(ImDrawList* self, ImTextureRef tex_ref, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImVec2 p4);                               // Implied uv1 = ImVec2(0, 0), uv2 = ImVec2(1, 0), uv3 = ImVec2(1, 1), uv4 = ImVec2(0, 1), col = IM_COL32_WHITE
+CIMGUI_API void        ImDrawList_AddImageQuad(ImDrawList* self, ImTextureRef tex_ref, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImVec2 p4);                                    // Implied uv1 = ImVec2(0, 0), uv2 = ImVec2(1, 0), uv3 = ImVec2(1, 1), uv4 = ImVec2(0, 1), col = IM_COL32_WHITE
 CIMGUI_API void        ImDrawList_AddImageQuadEx(ImDrawList* self, ImTextureRef tex_ref, ImVec2 p1, ImVec2 p2, ImVec2 p3, ImVec2 p4, ImVec2 uv1 /* = ImVec2(0, 0) */, ImVec2 uv2 /* = ImVec2(1, 0) */, ImVec2 uv3 /* = ImVec2(1, 1) */, ImVec2 uv4 /* = ImVec2(0, 1) */, ImU32 col /* = IM_COL32_WHITE */);
 CIMGUI_API void        ImDrawList_AddImageRounded(ImDrawList* self, ImTextureRef tex_ref, ImVec2 p_min, ImVec2 p_max, ImVec2 uv_min, ImVec2 uv_max, ImU32 col, float rounding, ImDrawFlags flags /* = 0 */);
 // Stateful path API, add points then finish with PathFillConvex() or PathStroke()
@@ -3414,15 +3512,15 @@ CIMGUI_API void        ImDrawList_AddImageRounded(ImDrawList* self, ImTextureRef
 CIMGUI_API void        ImDrawList_PathClear(ImDrawList* self);
 CIMGUI_API void        ImDrawList_PathLineTo(ImDrawList* self, ImVec2 pos);
 CIMGUI_API void        ImDrawList_PathLineToMergeDuplicate(ImDrawList* self, ImVec2 pos);
-CIMGUI_API void        ImDrawList_PathFillConvex(ImDrawList* self, ImU32 col);
+CIMGUI_API void        ImDrawList_PathFillConvex(ImDrawList* self, ImU32 col, ImDrawFlags flags /* = 0 */);
 CIMGUI_API void        ImDrawList_PathFillConcave(ImDrawList* self, ImU32 col);
 CIMGUI_API void        ImDrawList_PathStroke(ImDrawList* self, ImU32 col, float thickness /* = 1.0f */, ImDrawFlags flags /* = 0 */);
 CIMGUI_API void        ImDrawList_PathArcTo(ImDrawList* self, ImVec2 center, float radius, float a_min, float a_max, int num_segments /* = 0 */);
-CIMGUI_API void        ImDrawList_PathArcToFast(ImDrawList* self, ImVec2 center, float radius, int a_min_of_12, int a_max_of_12);                                 // Use precomputed angles for a 12 steps circle
-CIMGUI_API void        ImDrawList_PathEllipticalArcTo(ImDrawList* self, ImVec2 center, ImVec2 radius, float rot, float a_min, float a_max);                       // Implied num_segments = 0
+CIMGUI_API void        ImDrawList_PathArcToFast(ImDrawList* self, ImVec2 center, float radius, int a_min_of_12, int a_max_of_12);                                      // Use precomputed angles for a 12 steps circle
+CIMGUI_API void        ImDrawList_PathEllipticalArcTo(ImDrawList* self, ImVec2 center, ImVec2 radius, float rot, float a_min, float a_max);                            // Implied num_segments = 0
 CIMGUI_API void        ImDrawList_PathEllipticalArcToEx(ImDrawList* self, ImVec2 center, ImVec2 radius, float rot, float a_min, float a_max, int num_segments /* = 0 */); // Ellipse
-CIMGUI_API void        ImDrawList_PathBezierCubicCurveTo(ImDrawList* self, ImVec2 p2, ImVec2 p3, ImVec2 p4, int num_segments /* = 0 */);                          // Cubic Bezier (4 control points)
-CIMGUI_API void        ImDrawList_PathBezierQuadraticCurveTo(ImDrawList* self, ImVec2 p2, ImVec2 p3, int num_segments /* = 0 */);                                 // Quadratic Bezier (3 control points)
+CIMGUI_API void        ImDrawList_PathBezierCubicCurveTo(ImDrawList* self, ImVec2 p2, ImVec2 p3, ImVec2 p4, int num_segments /* = 0 */);                               // Cubic Bezier (4 control points)
+CIMGUI_API void        ImDrawList_PathBezierQuadraticCurveTo(ImDrawList* self, ImVec2 p2, ImVec2 p3, int num_segments /* = 0 */);                                      // Quadratic Bezier (3 control points)
 CIMGUI_API void        ImDrawList_PathRect(ImDrawList* self, ImVec2 rect_min, ImVec2 rect_max, float rounding /* = 0.0f */, ImDrawFlags flags /* = 0 */);
 // Advanced: Draw Callbacks
 // - May be used to alter render state (change sampler, blending, current shader). May be used to emit custom rendering commands (difficult to do correctly, but possible).
@@ -3434,11 +3532,11 @@ CIMGUI_API void        ImDrawList_PathRect(ImDrawList* self, ImVec2 rect_min, Im
 //   - If userdata_size == 0: we copy/store the 'userdata' argument as-is. It will be available unmodified in ImDrawCmd::UserCallbackData during render.
 //   - If userdata_size > 0,  we copy/store 'userdata_size' bytes pointed to by 'userdata'. We store them in a buffer stored inside the drawlist. ImDrawCmd::UserCallbackData will point inside that buffer so you have to retrieve data from there. Your callback may need to use ImDrawCmd::UserCallbackDataSize if you expect dynamically-sized data.
 //   - Support for userdata_size > 0 was added in v1.91.4, October 2024. So earlier code always only allowed to copy/store a simple void*.
-CIMGUI_API void        ImDrawList_AddCallback(ImDrawList* self, ImDrawCallback callback);                                                                         // Implied userdata = NULL, userdata_size = 0
+CIMGUI_API void        ImDrawList_AddCallback(ImDrawList* self, ImDrawCallback callback);                                                                              // Implied userdata = NULL, userdata_size = 0
 CIMGUI_API void        ImDrawList_AddCallbackEx(ImDrawList* self, ImDrawCallback callback, void* userdata /* = NULL */, size_t userdata_size /* = 0 */);
 // Advanced: Miscellaneous
-CIMGUI_API void        ImDrawList_AddDrawCmd(ImDrawList* self);                                                                                                   // This is useful if you need to forcefully create a new draw call (to allow for dependent rendering / blending). Otherwise primitives are merged into the same draw-call as much as possible
-CIMGUI_API ImDrawList* ImDrawList_CloneOutput(const ImDrawList* self);                                                                                            // Create a clone of the CmdBuffer/IdxBuffer/VtxBuffer. For multi-threaded rendering, consider using `imgui_threaded_rendering` from https://github.com/ocornut/imgui_club instead.
+CIMGUI_API void        ImDrawList_AddDrawCmd(ImDrawList* self);                                                                                                        // This is useful if you need to forcefully create a new draw call (to allow for dependent rendering / blending). Otherwise primitives are merged into the same draw-call as much as possible
+CIMGUI_API ImDrawList* ImDrawList_CloneOutput(const ImDrawList* self);                                                                                                 // Create a clone of the CmdBuffer/IdxBuffer/VtxBuffer. For multi-threaded rendering, consider using `imgui_threaded_rendering` from https://github.com/ocornut/imgui_club instead.
 // Advanced: Channels
 // - Use to split render into layers. By switching channels to can render out-of-order (e.g. submit FG primitives before BG primitives)
 // - Use to minimize draw calls (e.g. if going back-and-forth between multiple clipping rectangles, prefer to append into separate channels then merge at the end)
@@ -3453,12 +3551,12 @@ CIMGUI_API void        ImDrawList_ChannelsSetCurrent(ImDrawList* self, int n);
 // - All primitives needs to be reserved via PrimReserve() beforehand.
 CIMGUI_API void        ImDrawList_PrimReserve(ImDrawList* self, int idx_count, int vtx_count);
 CIMGUI_API void        ImDrawList_PrimUnreserve(ImDrawList* self, int idx_count, int vtx_count);
-CIMGUI_API void        ImDrawList_PrimRect(ImDrawList* self, ImVec2 a, ImVec2 b, ImU32 col);                                                                      // Axis aligned rectangle (composed of two triangles)
+CIMGUI_API void        ImDrawList_PrimRect(ImDrawList* self, ImVec2 a, ImVec2 b, ImU32 col);                                                                           // Axis aligned rectangle (composed of two triangles)
 CIMGUI_API void        ImDrawList_PrimRectUV(ImDrawList* self, ImVec2 a, ImVec2 b, ImVec2 uv_a, ImVec2 uv_b, ImU32 col);
 CIMGUI_API void        ImDrawList_PrimQuadUV(ImDrawList* self, ImVec2 a, ImVec2 b, ImVec2 c, ImVec2 d, ImVec2 uv_a, ImVec2 uv_b, ImVec2 uv_c, ImVec2 uv_d, ImU32 col);
 CIMGUI_API void        ImDrawList_PrimWriteVtx(ImDrawList* self, ImVec2 pos, ImVec2 uv, ImU32 col);
 CIMGUI_API void        ImDrawList_PrimWriteIdx(ImDrawList* self, ImDrawIdx idx);
-CIMGUI_API void        ImDrawList_PrimVtx(ImDrawList* self, ImVec2 pos, ImVec2 uv, ImU32 col);                                                                    // Write vertex with unique index
+CIMGUI_API void        ImDrawList_PrimVtx(ImDrawList* self, ImVec2 pos, ImVec2 uv, ImU32 col);                                                                         // Write vertex with unique index
 // Obsolete names
 #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 CIMGUI_API void ImDrawList_AddRectImDrawFlags(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col, float rounding, ImDrawFlags flags, float thickness); // OBSOLETED in 1.92.8: NEW FUNCTION SIGNATURE HAS 'thickness' AND 'flags' SWAPPED.
@@ -3470,6 +3568,7 @@ CIMGUI_API void ImDrawList_PopTextureID(ImDrawList* self);                      
 // [Internal helpers]
 CIMGUI_API void        ImDrawList__SetDrawListSharedData(ImDrawList* self, ImDrawListSharedData* data);
 CIMGUI_API void        ImDrawList__ResetForNewFrame(ImDrawList* self);
+CIMGUI_API void        ImDrawList__SetPixelDensity(ImDrawList* self, float pixel_density);
 CIMGUI_API void        ImDrawList__ClearFreeMemory(ImDrawList* self);
 CIMGUI_API void        ImDrawList__PopUnusedDrawCmd(ImDrawList* self);
 CIMGUI_API void        ImDrawList__TryMergeDrawCmds(ImDrawList* self);
@@ -3480,6 +3579,13 @@ CIMGUI_API void        ImDrawList__SetTexture(ImDrawList* self, ImTextureRef tex
 CIMGUI_API int         ImDrawList__CalcCircleAutoSegmentCount(const ImDrawList* self, float radius);
 CIMGUI_API void        ImDrawList__PathArcToFastEx(ImDrawList* self, ImVec2 center, float radius, int a_min_sample, int a_max_sample, int a_step);
 CIMGUI_API void        ImDrawList__PathArcToN(ImDrawList* self, ImVec2 center, float radius, float a_min, float a_max, int num_segments);
+CIMGUI_API void        ImDrawList__AddRectFilledBaked(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col, float r, ImVec4 tex_uvs, ImDrawFlags flags);
+CIMGUI_API void        ImDrawList__AddRectBaked(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col, float r, float t, ImVec4 tex_uvs, ImDrawFlags flags);
+CIMGUI_API void        ImDrawList__AddLine(ImDrawList* self, ImVec2 p1, ImVec2 p2, ImU32 col, float thickness, ImDrawFlags flags);
+CIMGUI_API void        ImDrawList__AddRectTinyRounding(ImDrawList* self, ImVec2 p_min, ImVec2 p_max, ImU32 col, float rounding, float thickness, ImDrawFlags flags);
+CIMGUI_API void        ImDrawList__SelectLineTexture(ImDrawList* self, float screen_thickness, ImVec2* out_uv0, ImVec2* out_uv1, float* out_fringe, ImDrawFlags flags);
+CIMGUI_API float       ImDrawList__CalculateCenterBiasedOffset(ImDrawList* self, float thickness);
+CIMGUI_API void        ImDrawList__AddPolyline(ImDrawList* self, const ImVec2* points, int num_points, ImU32 col, float thickness, ImDrawFlags flags, float max_inner_offset);
 
 // All draw data to render a Dear ImGui frame
 // (NB: the style and the naming convention here is a little inconsistent, we currently preserve them for backward compatibility purpose,
@@ -3674,10 +3780,11 @@ struct ImFontAtlasRect_t
 // Flags for ImFontAtlas build
 typedef enum
 {
-    ImFontAtlasFlags_None               = 0,
-    ImFontAtlasFlags_NoPowerOfTwoHeight = 1<<0,  // Don't round the height to next power of two
-    ImFontAtlasFlags_NoMouseCursors     = 1<<1,  // Don't build software mouse cursors into the atlas (save a little texture memory)
-    ImFontAtlasFlags_NoBakedLines       = 1<<2,  // Don't build thick line textures into the atlas (save a little texture memory, allow support for point/nearest filtering). The AntiAliasedLinesUseTex features uses them, otherwise they will be rendered using polygons (more expensive for CPU/GPU).
+    ImFontAtlasFlags_None                = 0,
+    ImFontAtlasFlags_NoPowerOfTwoHeight  = 1<<0,  // Don't round the height to next power of two
+    ImFontAtlasFlags_NoMouseCursors      = 1<<1,  // Don't build software mouse cursors into the atlas (save a little texture memory)
+    ImFontAtlasFlags_NoBakedLines        = 1<<2,  // Don't build anti-aliased line textures into the atlas (save a little texture memory). SINCE 1.93.0 THIS PREVENTS ANTI-ALIASED LINES FROM WORKING AND WILL DISABLE THEM.
+    ImFontAtlasFlags_NoBakedRoundCorners = 1<<3,  // Don't build round corners into the atlas.
 } ImFontAtlasFlags_;
 
 // Load and rasterize multiple TTF/OTF fonts into a same texture. The font atlas will build a single texture holding:
@@ -3714,20 +3821,20 @@ struct ImFontAtlas_t
     //-------------------------------------------
 
     // Input
-    ImFontAtlasFlags          Flags;                                          // Build flags (see ImFontAtlasFlags_)
-    ImTextureFormat           TexDesiredFormat;                               // Desired texture format (default to ImTextureFormat_RGBA32 but may be changed to ImTextureFormat_Alpha8).
-    int                       TexGlyphPadding;                                // FIXME: Should be called "TexPackPadding". Padding between glyphs within texture in pixels. Defaults to 1. If your rendering method doesn't rely on bilinear filtering you may set this to 0 (will also need to set AntiAliasedLinesUseTex = false).
-    int                       TexMinWidth;                                    // Minimum desired texture width. Must be a power of two. Default to 512.
-    int                       TexMinHeight;                                   // Minimum desired texture height. Must be a power of two. Default to 128.
-    int                       TexMaxWidth;                                    // Maximum desired texture width. Must be a power of two. Default to 8192.
-    int                       TexMaxHeight;                                   // Maximum desired texture height. Must be a power of two. Default to 8192.
-    void*                     UserData;                                       // Store your own atlas related user-data (if e.g. you have multiple font atlas).
+    ImFontAtlasFlags          Flags;                       // Build flags (see ImFontAtlasFlags_)
+    ImTextureFormat           TexDesiredFormat;            // Desired texture format (default to ImTextureFormat_RGBA32 but may be changed to ImTextureFormat_Alpha8).
+    int                       TexGlyphPadding;             // FIXME: Should be called "TexPackPadding". Padding between glyphs within texture in pixels. Defaults to 1. If your rendering method never relies on bilinear filtering you may set this to 0.
+    int                       TexMinWidth;                 // Minimum desired texture width. Must be a power of two. Default to 512.
+    int                       TexMinHeight;                // Minimum desired texture height. Must be a power of two. Default to 128.
+    int                       TexMaxWidth;                 // Maximum desired texture width. Must be a power of two. Default to 8192.
+    int                       TexMaxHeight;                // Maximum desired texture height. Must be a power of two. Default to 8192.
+    void*                     UserData;                    // Store your own atlas related user-data (if e.g. you have multiple font atlas).
 
     // Output
     // - Because textures are dynamically created/resized, the current texture identifier may changed at *ANY TIME* during the frame.
     // - This should not affect you as you can always use the latest value. But note that any precomputed UV coordinates are only valid for the current TexRef.
 #ifdef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
-    ImTextureRef              TexRef;                                         // Latest texture identifier == TexData->GetTexRef().
+    ImTextureRef              TexRef;                      // Latest texture identifier == TexData->GetTexRef().
 #else
     union                     // Latest texture identifier == TexData->GetTexRef(). // RENAMED TexID to TexRef in 1.92.0.
     {
@@ -3735,34 +3842,33 @@ struct ImFontAtlas_t
         ImTextureRef TexID;
     };
 #endif // #ifdef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
-    ImTextureData*            TexData;                                        // Latest texture.
+    ImTextureData*            TexData;                     // Latest texture.
 
     // [Internal]
-    ImVector_ImTextureDataPtr TexList;                                        // Texture list (most often TexList.Size == 1). TexData is always == TexList.back(). DO NOT USE DIRECTLY, USE GetDrawData().Textures[]/GetPlatformIO().Textures[] instead!
-    bool                      Locked;                                         // Marked as locked during ImGui::NewFrame()..EndFrame() scope if TexUpdates are not supported. Any attempt to modify the atlas will assert.
-    bool                      RendererHasTextures;                            // Copy of (BackendFlags & ImGuiBackendFlags_RendererHasTextures) from supporting context.
-    bool                      TexIsBuilt;                                     // Set when texture was built matching current font input. Mostly useful for legacy IsBuilt() call.
-    bool                      TexPixelsUseColors;                             // Tell whether our texture data is known to use colors (rather than just alpha channel), in order to help backend select a format or conversion process.
-    ImVec2                    TexUvScale;                                     // = (1.0f/TexData->TexWidth, 1.0f/TexData->TexHeight). May change as new texture gets created.
-    ImVec2                    TexUvWhitePixel;                                // Texture coordinates to a white pixel. May change as new texture gets created.
-    ImVector_ImFontPtr        Fonts;                                          // Hold all the fonts returned by AddFont*. Fonts[0] is the default font upon calling ImGui::NewFrame(), use ImGui::PushFont()/PopFont() to change the current font.
-    ImVector_ImFontConfig     Sources;                                        // Source/configuration data
-    ImVec4                    TexUvLines[IM_DRAWLIST_TEX_LINES_WIDTH_MAX+1];  // UVs for baked anti-aliased lines
-    int                       TexNextUniqueID;                                // Next value to be stored in TexData->UniqueID
-    int                       FontNextUniqueID;                               // Next value to be stored in ImFont->FontID
-    ImVector_ImDrawListSharedDataPtr DrawListSharedDatas;                     // List of users for this atlas. Typically one per Dear ImGui context.
-    ImFontAtlasBuilder*       Builder;                                        // Opaque interface to our data that doesn't need to be public and may be discarded when rebuilding.
-    const ImFontLoader*       FontLoader;                                     // Font loader opaque interface (default to use FreeType when IMGUI_ENABLE_FREETYPE is defined, otherwise default to use stb_truetype). Use SetFontLoader() to change this at runtime.
-    const char*               FontLoaderName;                                 // Font loader name (for display e.g. in About box) == FontLoader->Name
-    void*                     FontLoaderData;                                 // Font backend opaque storage
-    unsigned int              FontLoaderFlags;                                // Shared flags (for all fonts) for font loader. THIS IS BUILD IMPLEMENTATION DEPENDENT (e.g. Per-font override is also available in ImFontConfig).
-    int                       RefCount;                                       // Number of contexts using this atlas
-    ImGuiContext*             OwnerContext;                                   // Context which own the atlas will be in charge of updating and destroying it.
+    ImVector_ImTextureDataPtr TexList;                     // Texture list (most often TexList.Size == 1). TexData is always == TexList.back(). DO NOT USE DIRECTLY, USE GetDrawData().Textures[]/GetPlatformIO().Textures[] instead!
+    bool                      Locked;                      // Marked as locked during ImGui::NewFrame()..EndFrame() scope if TexUpdates are not supported. Any attempt to modify the atlas will assert.
+    bool                      RendererHasTextures;         // Copy of (BackendFlags & ImGuiBackendFlags_RendererHasTextures) from supporting context.
+    bool                      TexIsBuilt;                  // Set when texture was built matching current font input. Mostly useful for legacy IsBuilt() call.
+    bool                      TexPixelsUseColors;          // Tell whether our texture data is known to use colors (rather than just alpha channel), in order to help backend select a format or conversion process.
+    ImVec2                    TexUvScale;                  // = (1.0f/TexData->TexWidth, 1.0f/TexData->TexHeight). May change as new texture gets created.
+    ImVec2                    TexUvWhitePixel;             // Texture coordinates to a white pixel. May change as new texture gets created.
+    ImVector_ImFontPtr        Fonts;                       // Hold all the fonts returned by AddFont*. Fonts[0] is the default font upon calling ImGui::NewFrame(), use ImGui::PushFont()/PopFont() to change the current font.
+    ImVector_ImFontConfig     Sources;                     // Source/configuration data
+    int                       TexNextUniqueID;             // Next value to be stored in TexData->UniqueID
+    int                       FontNextUniqueID;            // Next value to be stored in ImFont->FontID
+    ImVector_ImDrawListSharedDataPtr DrawListSharedDatas;  // List of users for this atlas. Typically one per Dear ImGui context.
+    ImFontAtlasBuilder*       Builder;                     // Opaque interface to our data that doesn't need to be public and may be discarded when rebuilding.
+    const ImFontLoader*       FontLoader;                  // Font loader opaque interface (default to use FreeType when IMGUI_ENABLE_FREETYPE is defined, otherwise default to use stb_truetype). Use SetFontLoader() to change this at runtime.
+    const char*               FontLoaderName;              // Font loader name (for display e.g. in About box) == FontLoader->Name
+    void*                     FontLoaderData;              // Font backend opaque storage
+    unsigned int              FontLoaderFlags;             // Shared flags (for all fonts) for font loader. THIS IS BUILD IMPLEMENTATION DEPENDENT (e.g. Per-font override is also available in ImFontConfig).
+    int                       RefCount;                    // Number of contexts using this atlas
+    ImGuiContext*             OwnerContext;                // Context which own the atlas will be in charge of updating and destroying it.
 
     // [Obsolete]
 #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
     // Legacy: You can request your rectangles to be mapped as font glyph (given a font + Unicode point), so you can render e.g. custom colorful icons and use them as regular glyphs. --> Prefer using a custom ImFontLoader.
-    ImFontAtlasRect           TempRect;                                       // For old GetCustomRectByIndex() API
+    ImFontAtlasRect           TempRect;                    // For old GetCustomRectByIndex() API
 #endif // #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
     //unsigned int                      FontBuilderFlags;        // OBSOLETED in 1.92.0: Renamed to FontLoaderFlags.
     //int                               TexDesiredWidth;         // OBSOLETED in 1.92.0: Force texture width before calling Build(). Must be a power-of-two. If have many glyphs your graphics API have texture size restrictions you may want to increase texture width to decrease height.
@@ -3915,10 +4021,12 @@ struct ImFont_t
     ImWchar                  FallbackChar;                                          // 2-4   // out // Character used if a glyph isn't found (U+FFFD, '?')
     ImU8                     Used8kPagesMap[(IM_UNICODE_CODEPOINT_MAX +1)/8192/8];  // 1 bytes if ImWchar=ImWchar16, 17 bytes if ImWchar==ImWchar32. Store 1-bit for each block of 8K codepoints that has one active glyph. This is mainly used to facilitate iterations across all used codepoints.
     bool                     EllipsisAutoBake;                                      // 1     //     // Mark when the "..." glyph (== EllipsisChar) needs to be generated by combining multiple '.'.
-    ImGuiStorage             RemapPairs;                                            // 16    //     // Remapping pairs when using AddRemapChar(), otherwise empty.
+    ImGuiStorage             RemapPairs;                                            // 16    //     // Remapping pairs when using AddRemapCodepointXXX().
 #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
     float                    Scale;                                                 // 4     // in  // Legacy base font scale (~1.0f), multiplied by the per-window font scale which you can adjust with SetWindowFontScale()
 #endif // #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+
+    //inline void               AddRemapChar(ImWchar from_codepoint, ImWchar to_codepoint) { AddRemapCodepoint(from_codepoint, to_codepoint); } // Renamed in 1.93.0 (Sep 2026)
 };
 CIMGUI_API bool         ImFont_IsGlyphInFont(ImFont* self, ImWchar c);
 CIMGUI_API bool         ImFont_IsLoaded(const ImFont* self);
@@ -3939,7 +4047,8 @@ CIMGUI_API const char* ImFont_CalcWordWrapPositionA(ImFont* self, float scale, c
 #endif // #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 // [Internal] Don't use!
 CIMGUI_API void         ImFont_ClearOutputData(ImFont* self);
-CIMGUI_API void         ImFont_AddRemapChar(ImFont* self, ImWchar from_codepoint, ImWchar to_codepoint);                                                                   // Makes 'from_codepoint' character points to 'to_codepoint' glyph.
+CIMGUI_API void         ImFont_AddRemapCodepoint(ImFont* self, ImWchar from_codepoint, ImWchar to_codepoint);                                                              // Makes 'from_codepoint' character points to 'to_codepoint' glyph.
+CIMGUI_API void         ImFont_AddRemapCodepointToGlyphIndex(ImFont* self, ImWchar from_codepoint, int font_src_idx, int glyph_idx);
 CIMGUI_API bool         ImFont_IsGlyphRangeUnused(ImFont* self, unsigned int c_begin, unsigned int c_last);
 
 //-----------------------------------------------------------------------------
@@ -4031,6 +4140,7 @@ struct ImGuiPlatformIO_t
     ImDrawCallback            DrawCallback_ResetRenderState;        // Request to reset the graphics/render state.
     ImDrawCallback            DrawCallback_SetSamplerLinear;        // Request backend to set texture sampling to Linear.
     ImDrawCallback            DrawCallback_SetSamplerNearest;       // Request backend to set texture sampling to Nearest/Point.
+    ImDrawCallback            DrawCallback_SetSamplerFromTex;       // Request backend to use sampler associated to texture - only available in some backends: OpenGL2/3 and SDLRenderer3.
     //ImDrawCallback  DrawCallback_SetSamplerCustom;    // Request backend to set texture sampling using Backend Specific data.
 
     //------------------------------------------------------------------
@@ -4159,6 +4269,18 @@ CIMGUI_API ImVec2 igGetWindowContentRegionMax(void);                     // Cont
 
 #define ImDrawCallback_ResetRenderState     (ImDrawCallback)(-8)     // OBSOLETED in 1.92.8: Use ImGui::GetPlatformIO().DrawCallback_ResetRenderState
 
+// -- RENAMED in 1.93.0: Merged ImDrawListFlags into ImDrawFlags.
+typedef ImDrawFlags ImDrawListFlags;
+typedef enum
+{
+    ImDrawListFlags_None                   = ImDrawFlags_None,
+    ImDrawListFlags_AntiAliasedFill        = ImDrawFlags_AAFill,
+    ImDrawListFlags_AntiAliasedLines       = ImDrawFlags_AALines,
+    ImDrawListFlags_AntiAliasedLinesUseTex = ImDrawFlags_AALines,  // No effect, anti-aliased rendering always uses textures from 1.93+
+    ImDrawListFlags_AllowVtxOffset         = ImDrawFlags_UseVtxOffset,
+    ImDrawListFlags_TextNoPixelSnap        = ImDrawFlags_TextNoPixelSnap,
+} ImDrawListFlags_;
+
 //-- OBSOLETED in 1.92.0: ImFontAtlasCustomRect becomes ImTextureRect
 // - ImFontAtlasCustomRect::X,Y          --> ImTextureRect::x,y
 // - ImFontAtlasCustomRect::Width,Height --> ImTextureRect::w,h
@@ -4182,16 +4304,16 @@ typedef ImFontAtlasRect ImFontAtlasCustomRect;
 //typedef ImDrawFlags ImDrawCornerFlags;
 //enum ImDrawCornerFlags_
 //{
-//    ImDrawCornerFlags_None      = ImDrawFlags_RoundCornersNone,         // Was == 0 prior to 1.82, this is now == ImDrawFlags_RoundCornersNone which is != 0 and not implicit
-//    ImDrawCornerFlags_TopLeft   = ImDrawFlags_RoundCornersTopLeft,      // Was == 0x01 (1 << 0) prior to 1.82. Order matches ImDrawFlags_NoRoundCorner* flag (we exploit this internally).
-//    ImDrawCornerFlags_TopRight  = ImDrawFlags_RoundCornersTopRight,     // Was == 0x02 (1 << 1) prior to 1.82.
-//    ImDrawCornerFlags_BotLeft   = ImDrawFlags_RoundCornersBottomLeft,   // Was == 0x04 (1 << 2) prior to 1.82.
-//    ImDrawCornerFlags_BotRight  = ImDrawFlags_RoundCornersBottomRight,  // Was == 0x08 (1 << 3) prior to 1.82.
-//    ImDrawCornerFlags_All       = ImDrawFlags_RoundCornersAll,          // Was == 0x0F prior to 1.82
-//    ImDrawCornerFlags_Top       = ImDrawCornerFlags_TopLeft | ImDrawCornerFlags_TopRight,
-//    ImDrawCornerFlags_Bot       = ImDrawCornerFlags_BotLeft | ImDrawCornerFlags_BotRight,
-//    ImDrawCornerFlags_Left      = ImDrawCornerFlags_TopLeft | ImDrawCornerFlags_BotLeft,
-//    ImDrawCornerFlags_Right     = ImDrawCornerFlags_TopRight | ImDrawCornerFlags_BotRight,
+//    ImDrawCornerFlags_None      = ImDrawFlags_RoundNone,         // Was == 0 prior to 1.82, this is now == ImDrawFlags_RoundNone which is != 0 and not implicit
+//    ImDrawCornerFlags_TopLeft   = ImDrawFlags_RoundTopLeft,      // Was == 0x01 (1 << 0) prior to 1.82. Order matches ImDrawFlags_NoRoundCorner* flag (we exploit this internally).
+//    ImDrawCornerFlags_TopRight  = ImDrawFlags_RoundTopRight,     // Was == 0x02 (1 << 1) prior to 1.82.
+//    ImDrawCornerFlags_BotLeft   = ImDrawFlags_RoundBottomLeft,   // Was == 0x04 (1 << 2) prior to 1.82.
+//    ImDrawCornerFlags_BotRight  = ImDrawFlags_RoundBottomRight,  // Was == 0x08 (1 << 3) prior to 1.82.
+//    ImDrawCornerFlags_All       = ImDrawFlags_RoundAll,          // Was == 0x0F prior to 1.82
+//    ImDrawCornerFlags_Top       = ImDrawFlags_RoundTopLeft | ImDrawFlags_RoundTopRight,
+//    ImDrawCornerFlags_Bot       = ImDrawFlags_RoundBottomLeft | ImDrawFlags_RoundBottomRight,
+//    ImDrawCornerFlags_Left      = ImDrawFlags_RoundTopLeft | ImDrawFlags_RoundBottomLeft,
+//    ImDrawCornerFlags_Right     = ImDrawFlags_RoundTopRight | ImDrawFlags_RoundBottomRight,
 //};
 
 // RENAMED and MERGED both ImGuiKey_ModXXX and ImGuiModFlags_XXX into ImGuiMod_XXX (from September 2022)
