@@ -1741,10 +1741,12 @@ typedef struct sapp_allocator {
     _SAPP_LOGITEM_XMACRO(WIN32_WGL_OPENGL_PROFILE_NOT_SUPPORTED, "requested OpenGL profile not support by GL driver (ERROR_INVALID_PROFILE_ARB)") \
     _SAPP_LOGITEM_XMACRO(WIN32_WGL_INCOMPATIBLE_DEVICE_CONTEXT, "CreateContextAttribsARB failed with ERROR_INCOMPATIBLE_DEVICE_CONTEXTS_ARB") \
     _SAPP_LOGITEM_XMACRO(WIN32_WGL_CREATE_CONTEXT_ATTRIBS_FAILED_OTHER, "CreateContextAttribsARB failed for other reason") \
-    _SAPP_LOGITEM_XMACRO(WIN32_D3D11_CREATE_DEVICE_AND_SWAPCHAIN_WITH_DEBUG_FAILED, "D3D11CreateDeviceAndSwapChain() with D3D11_CREATE_DEVICE_DEBUG failed, retrying without debug flag.") \
+    _SAPP_LOGITEM_XMACRO(WIN32_D3D11_CREATE_DEVICE_WITH_DEBUG_FAILED, "D3D11CreateDevice() with D3D11_CREATE_DEVICE_DEBUG failed, retrying without debug flag.") \
+    _SAPP_LOGITEM_XMACRO(WIN32_D3D11_CREATE_DEVICE_FAILED, "D3D11CreateDevice() failed") \
     _SAPP_LOGITEM_XMACRO(WIN32_D3D11_GET_IDXGIFACTORY_FAILED, "could not obtain IDXGIFactory object") \
     _SAPP_LOGITEM_XMACRO(WIN32_D3D11_GET_IDXGIADAPTER_FAILED, "could not obtain IDXGIAdapter object") \
     _SAPP_LOGITEM_XMACRO(WIN32_D3D11_QUERY_INTERFACE_IDXGIDEVICE1_FAILED, "could not obtain IDXGIDevice1 interface") \
+    _SAPP_LOGITEM_XMACRO(WIN32_D3D11_CREATE_SWAPCHAIN_FAILED, "IDXGIFactory:CreateSwapchain() failed") \
     _SAPP_LOGITEM_XMACRO(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_LOCK, "RegisterRawInputDevices() failed (on mouse lock)") \
     _SAPP_LOGITEM_XMACRO(WIN32_REGISTER_RAW_INPUT_DEVICES_FAILED_MOUSE_UNLOCK, "RegisterRawInputDevices() failed (on mouse unlock)") \
     _SAPP_LOGITEM_XMACRO(WIN32_GET_RAW_INPUT_DATA_FAILED, "GetRawInputData() failed") \
@@ -2546,9 +2548,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
             #define D3D11_NO_HELPERS
         #endif
         #include <d3d11.h>
-        #include <dxgi.h>
-        // DXGI_SWAP_EFFECT_FLIP_DISCARD is only defined in newer Windows SDKs, so don't depend on it
-        #define _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD (4)
+        #include <dxgi1_5.h>
     #endif
     #ifndef WM_MOUSEHWHEEL /* see https://github.com/floooh/sokol/issues/138 */
         #define WM_MOUSEHWHEEL (0x020E)
@@ -2924,10 +2924,17 @@ typedef struct {
     ID3D11RenderTargetView* msaa_rtv;
     ID3D11Texture2D* ds;
     ID3D11DepthStencilView* dsv;
-    DXGI_SWAP_CHAIN_DESC swap_chain_desc;
-    IDXGISwapChain* swap_chain;
-    IDXGIDevice1* dxgi_device;
 } _sapp_d3d11_t;
+
+typedef struct {
+    DXGI_SWAP_CHAIN_DESC swapchain_desc;
+    IDXGISwapChain* swapchain;
+    IDXGIAdapter* adapter;
+    IDXGIDevice1* device1;          // NOTE: supported since Win7
+    IDXGIDevice3* opt_device3;      // OPTIONAL! supported since Win8.1
+    IDXGIFactory* factory;
+    IDXGIFactory5* opt_factory5;    // OPTIONAL! supported since Win10 1703
+} _sapp_dxgi_t;
 #endif
 
 #if defined(_SAPP_WIN32)
@@ -3338,6 +3345,7 @@ typedef struct {
         _sapp_win32_t win32;
         #if defined(SOKOL_D3D11)
             _sapp_d3d11_t d3d11;
+            _sapp_dxgi_t dxgi;
         #elif defined(SOKOL_GLCORE)
             _sapp_wgl_t wgl;
         #endif
@@ -3555,7 +3563,8 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, size_t dst_buf_len)
 }
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
-    SOKOL_ASSERT(desc && ((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn)));
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
     sapp_desc res = *desc;
     res.depth_format = _sapp_def(res.depth_format, SAPP_PIXELFORMAT_DEPTH);
     res.composite_mode = _sapp_def(res.composite_mode, SAPP_COMPOSITEMODE_OPAQUE);
@@ -6459,7 +6468,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
 }
 #endif
-
 - (BOOL)isOpaque {
     return _sapp.desc.composite_mode == SAPP_COMPOSITEMODE_OPAQUE;
 }
@@ -6467,6 +6475,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     return YES;
 }
 - (BOOL)acceptsFirstResponder {
+    return YES;
+}
+// clicking an inactive window also sends a mouse button event
+// (same behaviour as on Windows and Linux)
+- (BOOL)acceptsFirstMouse:(NSEvent*)event {
+    _SOKOL_UNUSED(event);
     return YES;
 }
 - (void)updateTrackingAreas {
@@ -8785,26 +8799,17 @@ _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
 
 #define _SAPP_SAFE_RELEASE(obj) if (obj) { _sapp_d3d11_Release(obj); obj=0; }
 
-
 static const IID _sapp_IID_ID3D11Texture2D = { 0x6f15aaf2,0xd208,0x4e89, {0x9a,0xb4,0x48,0x95,0x35,0xd3,0x4f,0x9c} };
 static const IID _sapp_IID_IDXGIDevice1    = { 0x77db970f,0x6276,0x48ba, {0xba,0x28,0x07,0x01,0x43,0xb4,0x39,0x2c} };
+static const IID _sapp_IID_IDXGIDevice3    = { 0x6007896c,0x3244,0x4afd, {0xbf,0x18,0xa6,0xd3,0xbe,0xda,0x50,0x23} };
 static const IID _sapp_IID_IDXGIFactory    = { 0x7b7166ec,0x21c7,0x44ae, {0xb2,0x1a,0xc9,0xae,0x32,0x1a,0xe3,0x69} };
+static const IID _sapp_IID_IDXGIFactory5   = { 0x7632e1f5,0xee65,0x4dca, {0x87,0xfd,0x84,0xcd,0x75,0xf8,0x83,0x8d} };
 
-static inline HRESULT _sapp_dxgi_GetBuffer(IDXGISwapChain* self, UINT Buffer, REFIID riid, void** ppSurface) {
-    #if defined(__cplusplus)
-        return self->GetBuffer(Buffer, riid, ppSurface);
-    #else
-        return self->lpVtbl->GetBuffer(self, Buffer, riid, ppSurface);
-    #endif
-}
-
-static inline HRESULT _sapp_d3d11_QueryInterface(ID3D11Device* self, REFIID riid, void** ppvObject) {
-    #if defined(__cplusplus)
-        return self->QueryInterface(riid, ppvObject);
-    #else
-        return self->lpVtbl->QueryInterface(self, riid, ppvObject);
-    #endif
-}
+#if defined(__cplusplus)
+#define _SAPP_WIN32_QUERY_INTERFACE(self, riid, ppvObject) self->QueryInterface(riid, ppvObject)
+#else
+#define _SAPP_WIN32_QUERY_INTERFACE(self, riid, ppvObject) self->lpVtbl->QueryInterface(self, riid, ppvObject)
+#endif
 
 static inline HRESULT _sapp_d3d11_CreateRenderTargetView(ID3D11Device* self, ID3D11Resource *pResource, const D3D11_RENDER_TARGET_VIEW_DESC* pDesc, ID3D11RenderTargetView** ppRTView) {
     #if defined(__cplusplus)
@@ -8827,6 +8832,38 @@ static inline HRESULT _sapp_d3d11_CreateDepthStencilView(ID3D11Device* self, ID3
         return self->CreateDepthStencilView(pResource, pDesc, ppDepthStencilView);
     #else
         return self->lpVtbl->CreateDepthStencilView(self, pResource, pDesc, ppDepthStencilView);
+    #endif
+}
+
+static inline void _sapp_d3d11_ClearState(ID3D11DeviceContext* self) {
+    #if defined(__cplusplus)
+        self->ClearState();
+    #else
+        self->lpVtbl->ClearState(self);
+    #endif
+}
+
+static inline void _sapp_d3d11_Flush(ID3D11DeviceContext* self) {
+    #if defined(__cplusplus)
+        self->Flush();
+    #else
+        self->lpVtbl->Flush(self);
+    #endif
+}
+
+static inline void _sapp_dxgi_Trim(IDXGIDevice3* self) {
+    #if defined(__cplusplus)
+        self->Trim();
+    #else
+        self->lpVtbl->Trim(self);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_GetBuffer(IDXGISwapChain* self, UINT Buffer, REFIID riid, void** ppSurface) {
+    #if defined(__cplusplus)
+        return self->GetBuffer(Buffer, riid, ppSurface);
+    #else
+        return self->lpVtbl->GetBuffer(self, Buffer, riid, ppSurface);
     #endif
 }
 
@@ -8886,6 +8923,22 @@ static inline HRESULT _sapp_dxgi_MakeWindowAssociation(IDXGIFactory* self, HWND 
     #endif
 }
 
+static inline HRESULT _sapp_dxgi_CreateSwapChain(IDXGIFactory* self, IUnknown* pDevice, DXGI_SWAP_CHAIN_DESC* pDesc, IDXGISwapChain** ppSwapChain) {
+    #if defined(__cplusplus)
+        return self->CreateSwapChain(pDevice, pDesc, ppSwapChain);
+    #else
+        return self->lpVtbl->CreateSwapChain(self, pDevice, pDesc, ppSwapChain);
+    #endif
+}
+
+static inline HRESULT _sapp_dxgi_CheckFeatureSupport(IDXGIFactory5* self, DXGI_FEATURE Feature, void* pFeatureSupportData, UINT FeatureSupportDataSize) {
+    #if defined(__cplusplus)
+        return self->CheckFeatureSupport(Feature, pFeatureSupportData, FeatureSupportDataSize);
+    #else
+        return self->lpVtbl->CheckFeatureSupport(self, Feature, pFeatureSupportData, FeatureSupportDataSize);
+    #endif
+}
+
 _SOKOL_PRIVATE DXGI_FORMAT _sapp_d3d11_swapchain_color_format(void) {
     if (_sapp.desc.hdr) {
         return DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -8922,45 +8975,34 @@ _SOKOL_PRIVATE DXGI_FORMAT _sapp_d3d11_depth_format(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
-    DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.d3d11.swap_chain_desc;
-    sc_desc->BufferDesc.Width = (UINT)_sapp.framebuffer_width;
-    sc_desc->BufferDesc.Height = (UINT)_sapp.framebuffer_height;
-    sc_desc->BufferDesc.Format = _sapp_d3d11_swapchain_color_format();
-    sc_desc->BufferDesc.RefreshRate.Numerator = 60;
-    sc_desc->BufferDesc.RefreshRate.Denominator = 1;
-    sc_desc->OutputWindow = _sapp.win32.hwnd;
-    sc_desc->Windowed = true;
-    if (_sapp.win32.is_win10_or_greater) {
-        sc_desc->BufferCount = 2;
-        sc_desc->SwapEffect = (DXGI_SWAP_EFFECT) _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    } else {
-        sc_desc->BufferCount = 1;
-        sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-    }
-    sc_desc->SampleDesc.Count = 1;
-    sc_desc->SampleDesc.Quality = 0;
-    sc_desc->BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    UINT create_flags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-    #if defined(SOKOL_DEBUG)
-        create_flags |= D3D11_CREATE_DEVICE_DEBUG;
-    #endif
-    D3D_FEATURE_LEVEL requested_feature_levels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
+_SOKOL_PRIVATE HRESULT _sapp_d3d11_create_device(UINT extra_device_flags) {
+    const UINT device_flags = D3D11_CREATE_DEVICE_SINGLETHREADED
+        | D3D11_CREATE_DEVICE_BGRA_SUPPORT
+        | extra_device_flags;
+    const D3D_FEATURE_LEVEL requested_feature_levels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
     D3D_FEATURE_LEVEL result_feature_level;
-    HRESULT hr = D3D11CreateDeviceAndSwapChain(
-        NULL,                           /* pAdapter (use default) */
-        D3D_DRIVER_TYPE_HARDWARE,       /* DriverType */
-        NULL,                           /* Software */
-        create_flags,                   /* Flags */
-        requested_feature_levels,       /* pFeatureLevels */
-        2,                              /* FeatureLevels */
-        D3D11_SDK_VERSION,              /* SDKVersion */
-        sc_desc,                        /* pSwapChainDesc */
-        &_sapp.d3d11.swap_chain,        /* ppSwapChain */
-        &_sapp.d3d11.device,            /* ppDevice */
-        &result_feature_level,          /* pFeatureLevel */
-        &_sapp.d3d11.device_context);   /* ppImmediateContext */
-    _SOKOL_UNUSED(hr);
+    HRESULT hr = D3D11CreateDevice(
+        NULL,                       // pAdapter (use default)
+        D3D_DRIVER_TYPE_HARDWARE,   // DriverType
+        NULL,                       // Software
+        device_flags,               // Flags
+        requested_feature_levels,   // pFeatureLevels,
+        2,                          // FeatureLevels
+        D3D11_SDK_VERSION,          // SDKVersion
+        &_sapp.d3d11.device,        // ppDevice
+        &result_feature_level,      // pFeatureLevel
+        &_sapp.d3d11.device_context);   // ppImmediateContext
+    return hr;
+}
+
+_SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
+    HRESULT hr;
+
+    UINT extra_device_flags = 0;
+    #if defined(SOKOL_DEBUG)
+        extra_device_flags |= D3D11_CREATE_DEVICE_DEBUG;
+    #endif
+    hr = _sapp_d3d11_create_device(extra_device_flags);
     #if defined(SOKOL_DEBUG)
     if (!SUCCEEDED(hr)) {
         // if initialization with D3D11_CREATE_DEVICE_DEBUG fails, this could be because the
@@ -8972,52 +9014,89 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
         // ===
         //
         // ...just retry with the DEBUG flag switched off
-        _SAPP_ERROR(WIN32_D3D11_CREATE_DEVICE_AND_SWAPCHAIN_WITH_DEBUG_FAILED);
-        create_flags &= ~(UINT)D3D11_CREATE_DEVICE_DEBUG;
-        hr = D3D11CreateDeviceAndSwapChain(
-            NULL,                           /* pAdapter (use default) */
-            D3D_DRIVER_TYPE_HARDWARE,       /* DriverType */
-            NULL,                           /* Software */
-            create_flags,                   /* Flags */
-            requested_feature_levels,       /* pFeatureLevels */
-            2,                              /* FeatureLevels */
-            D3D11_SDK_VERSION,              /* SDKVersion */
-            sc_desc,                        /* pSwapChainDesc */
-            &_sapp.d3d11.swap_chain,        /* ppSwapChain */
-            &_sapp.d3d11.device,            /* ppDevice */
-            &result_feature_level,          /* pFeatureLevel */
-            &_sapp.d3d11.device_context);   /* ppImmediateContext */
+        _SAPP_ERROR(WIN32_D3D11_CREATE_DEVICE_WITH_DEBUG_FAILED);
+        extra_device_flags &= ~(UINT)D3D11_CREATE_DEVICE_DEBUG;
+        hr = _sapp_d3d11_create_device(extra_device_flags);
     }
     #endif
-    SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.swap_chain && _sapp.d3d11.device && _sapp.d3d11.device_context);
+    if (!SUCCEEDED(hr)) {
+        _SAPP_PANIC(WIN32_D3D11_CREATE_DEVICE_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.d3d11.device && _sapp.d3d11.device_context);
 
-    // minimize frame latency, disable Alt-Enter
-    hr = _sapp_d3d11_QueryInterface(_sapp.d3d11.device, _sapp_win32_refiid(_sapp_IID_IDXGIDevice1), (void**)&_sapp.d3d11.dxgi_device);
-    if (SUCCEEDED(hr) && _sapp.d3d11.dxgi_device) {
-        _sapp_dxgi_SetMaximumFrameLatency(_sapp.d3d11.dxgi_device, 1);
-        IDXGIAdapter* dxgi_adapter = 0;
-        hr = _sapp_dxgi_GetAdapter(_sapp.d3d11.dxgi_device, &dxgi_adapter);
-        if (SUCCEEDED(hr) && dxgi_adapter) {
-            IDXGIFactory* dxgi_factory = 0;
-            hr = _sapp_dxgi_GetParent((IDXGIObject*)dxgi_adapter, _sapp_win32_refiid(_sapp_IID_IDXGIFactory), (void**)&dxgi_factory);
-            if (SUCCEEDED(hr)) {
-                _sapp_dxgi_MakeWindowAssociation(dxgi_factory, _sapp.win32.hwnd, DXGI_MWA_NO_ALT_ENTER|DXGI_MWA_NO_PRINT_SCREEN);
-                _SAPP_SAFE_RELEASE(dxgi_factory);
-            } else {
-                _SAPP_ERROR(WIN32_D3D11_GET_IDXGIFACTORY_FAILED);
-            }
-            _SAPP_SAFE_RELEASE(dxgi_adapter);
-        } else {
-            _SAPP_ERROR(WIN32_D3D11_GET_IDXGIADAPTER_FAILED);
-        }
-    } else {
+    // lookup dxgi device, adapter and dxgi factory interfaces
+    hr = _SAPP_WIN32_QUERY_INTERFACE(_sapp.d3d11.device, _sapp_win32_refiid(_sapp_IID_IDXGIDevice1), (void**)&_sapp.dxgi.device1);
+    if (!SUCCEEDED(hr)) {
         _SAPP_PANIC(WIN32_D3D11_QUERY_INTERFACE_IDXGIDEVICE1_FAILED);
     }
+    SOKOL_ASSERT(_sapp.dxgi.device1);
+    hr = _sapp_dxgi_GetAdapter(_sapp.dxgi.device1, &_sapp.dxgi.adapter);
+    if (!SUCCEEDED(hr)) {
+        _SAPP_PANIC(WIN32_D3D11_GET_IDXGIADAPTER_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.dxgi.adapter);
+    hr = _sapp_dxgi_GetParent((IDXGIObject*)_sapp.dxgi.adapter, _sapp_win32_refiid(_sapp_IID_IDXGIFactory), (void**)&_sapp.dxgi.factory);
+    if (!SUCCEEDED(hr)) {
+        _SAPP_PANIC(WIN32_D3D11_GET_IDXGIFACTORY_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.dxgi.factory);
+
+    // lookup optional DXGI interfaces
+    hr = _SAPP_WIN32_QUERY_INTERFACE(_sapp.d3d11.device, _sapp_win32_refiid(_sapp_IID_IDXGIDevice3), (void**)&_sapp.dxgi.opt_device3);
+    if (!SUCCEEDED(hr)) {
+        _sapp.dxgi.opt_device3 = 0;
+    }
+    hr = _SAPP_WIN32_QUERY_INTERFACE(_sapp.dxgi.factory, _sapp_win32_refiid(_sapp_IID_IDXGIFactory5), (void**)&_sapp.dxgi.opt_factory5);
+    if (!SUCCEEDED(hr)) {
+        _sapp.dxgi.opt_factory5 = 0;
+    }
+
+    // create swapchain
+    // FIXME: drop Win7 support and switch to DXGI_SWAP_CHAIN_DESC1
+    DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.dxgi.swapchain_desc;
+    sc_desc->BufferDesc.Width = (UINT)_sapp.framebuffer_width;
+    sc_desc->BufferDesc.Height = (UINT)_sapp.framebuffer_height;
+    sc_desc->BufferDesc.Format = _sapp_d3d11_swapchain_color_format();
+    sc_desc->BufferDesc.RefreshRate.Numerator = 60; // this appears to be ignored
+    sc_desc->BufferDesc.RefreshRate.Denominator = 1;
+    sc_desc->OutputWindow = _sapp.win32.hwnd;
+    sc_desc->Windowed = true;
+    if (_sapp.win32.is_win10_or_greater) {
+        sc_desc->BufferCount = 2;
+        sc_desc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    } else {
+        sc_desc->BufferCount = 1;
+        sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+    }
+    if (_sapp.dxgi.opt_factory5) {
+        BOOL dxgi_allow_tearing = FALSE;
+        hr = _sapp_dxgi_CheckFeatureSupport(_sapp.dxgi.opt_factory5, DXGI_FEATURE_PRESENT_ALLOW_TEARING, &dxgi_allow_tearing, sizeof(dxgi_allow_tearing));
+        if (SUCCEEDED(hr) && dxgi_allow_tearing) {
+            sc_desc->Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+        }
+    }
+    sc_desc->SampleDesc.Count = 1;
+    sc_desc->SampleDesc.Quality = 0;
+    sc_desc->BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    hr = _sapp_dxgi_CreateSwapChain(_sapp.dxgi.factory, (IUnknown*)_sapp.dxgi.device1, sc_desc, &_sapp.dxgi.swapchain);
+    if (!SUCCEEDED(hr)) {
+        _SAPP_PANIC(WIN32_D3D11_CREATE_SWAPCHAIN_FAILED);
+    }
+    SOKOL_ASSERT(_sapp.dxgi.swapchain);
+
+    // minimize frame latency, disable Alt-Enter
+    // NOTE: at least MakeWindowAssociation *MUST* run after creating the swapchain
+    _sapp_dxgi_SetMaximumFrameLatency(_sapp.dxgi.device1, 1);
+    _sapp_dxgi_MakeWindowAssociation(_sapp.dxgi.factory, _sapp.win32.hwnd, DXGI_MWA_NO_ALT_ENTER|DXGI_MWA_NO_PRINT_SCREEN);
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_destroy_device_and_swapchain(void) {
-    _SAPP_SAFE_RELEASE(_sapp.d3d11.swap_chain);
-    _SAPP_SAFE_RELEASE(_sapp.d3d11.dxgi_device);
+    _SAPP_SAFE_RELEASE(_sapp.dxgi.swapchain);
+    _SAPP_SAFE_RELEASE(_sapp.dxgi.opt_factory5);
+    _SAPP_SAFE_RELEASE(_sapp.dxgi.opt_device3);
+    _SAPP_SAFE_RELEASE(_sapp.dxgi.factory);
+    _SAPP_SAFE_RELEASE(_sapp.dxgi.adapter);
+    _SAPP_SAFE_RELEASE(_sapp.dxgi.device1);
     _SAPP_SAFE_RELEASE(_sapp.d3d11.device_context);
     _SAPP_SAFE_RELEASE(_sapp.d3d11.device);
 }
@@ -9036,7 +9115,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     bool wants_depth = _sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE;
 
     // view for the swapchain-created framebuffer
-    hr = _sapp_dxgi_GetBuffer(_sapp.d3d11.swap_chain, 0, _sapp_win32_refiid(_sapp_IID_ID3D11Texture2D), (void**)&_sapp.d3d11.rt);
+    hr = _sapp_dxgi_GetBuffer(_sapp.dxgi.swapchain, 0, _sapp_win32_refiid(_sapp_IID_ID3D11Texture2D), (void**)&_sapp.d3d11.rt);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rt);
 
     // when SRGB is requested, the view needs a different format than the surface
@@ -9092,28 +9171,47 @@ _SOKOL_PRIVATE void _sapp_d3d11_destroy_default_render_target(void) {
     _SAPP_SAFE_RELEASE(_sapp.d3d11.dsv);
 }
 
-_SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
-    if (_sapp.d3d11.swap_chain) {
-        _sapp_d3d11_destroy_default_render_target();
-        _sapp_dxgi_ResizeBuffers(_sapp.d3d11.swap_chain, _sapp.d3d11.swap_chain_desc.BufferCount, (UINT)_sapp.framebuffer_width, (UINT)_sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
-        _sapp_d3d11_create_default_render_target();
+_SOKOL_PRIVATE void _sapp_d3d11_flush_and_trim(void) {
+    _sapp_d3d11_ClearState(_sapp.d3d11.device_context);
+    _sapp_d3d11_Flush(_sapp.d3d11.device_context);
+    if (_sapp.dxgi.opt_device3) {
+        _sapp_dxgi_Trim(_sapp.dxgi.opt_device3);
     }
+}
+
+_SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
+    if (!_sapp.dxgi.swapchain) {
+        return;
+    }
+    _sapp_d3d11_destroy_default_render_target();
+    _sapp_d3d11_flush_and_trim();
+    _sapp.dxgi.swapchain_desc.BufferDesc.Width = (UINT)_sapp.framebuffer_width;
+    _sapp.dxgi.swapchain_desc.BufferDesc.Height = (UINT)_sapp.framebuffer_height;
+    _sapp_dxgi_ResizeBuffers(_sapp.dxgi.swapchain,
+        _sapp.dxgi.swapchain_desc.BufferCount,
+        _sapp.dxgi.swapchain_desc.BufferDesc.Width,
+        _sapp.dxgi.swapchain_desc.BufferDesc.Height,
+        _sapp.dxgi.swapchain_desc.BufferDesc.Format,
+        _sapp.dxgi.swapchain_desc.Flags);
+    _sapp_d3d11_create_default_render_target();
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_present(bool from_winproc) {
     UINT flags = 0;
     UINT swap_interval = (UINT)_sapp.desc.swap_interval;
-    // DXGI_PRESENT_DO_NOT_WAIT isn't supported on Win7
-    if (_sapp.win32.is_win10_or_greater) {
-        if (_sapp.desc.disable_vsync || from_winproc) {
-            // NOTE: disabled vsync-throttling when called from the winproc modal window
-            // resize/movement loop avoids window system stuttering on some drivers
-            // (notably: NVIDIA)
-            flags |= DXGI_PRESENT_DO_NOT_WAIT;
-            swap_interval = 0;
+    if (_sapp.win32.is_win10_or_greater && (_sapp.desc.disable_vsync || from_winproc)) {
+        // NOTE: DXGI_PRESENT_DO_NOT_WAIT when called from the winproc modal window
+        // resize/movement loop avoids window system stuttering on some drivers
+        // (notably: NVIDIA), also note that the stutter is still present with
+        // DXGI_PRESENT_ALLOW_TEARING.
+        swap_interval = 0;
+        flags = DXGI_PRESENT_DO_NOT_WAIT;
+        // outside winproc, prefer allow-tearing when vsync is disabled
+        if (!from_winproc && (_sapp.dxgi.swapchain_desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING)) {
+            flags = DXGI_PRESENT_ALLOW_TEARING;
         }
     }
-    _sapp_dxgi_Present(_sapp.d3d11.swap_chain, swap_interval, flags);
+    _sapp_dxgi_Present(_sapp.dxgi.swapchain, swap_interval, flags);
 }
 
 #endif /* SOKOL_D3D11 */
@@ -9445,7 +9543,12 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
     }
 }
 
-/* updates current window and framebuffer size from the window's client rect, returns true if size has changed */
+// updates current window and framebuffer size from the window's client rect
+//
+// NOTE: Vulkan has a special swapchain size update path not
+// handled in this function.
+//
+// Returns true if framebuffer size has changed.
 _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     RECT rect;
     if (GetClientRect(_sapp.win32.hwnd, &rect)) {
@@ -10126,9 +10229,6 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_TIMER:
                 _sapp_timing_update(&_sapp.timing, 0.0);
                 _sapp_win32_frame(true);
-                /*
-                * NOTE: resizing each frame explodes memory usage
-                *
                 if (_sapp_win32_update_dimensions()) {
                     #if defined(SOKOL_D3D11)
                     _sapp_d3d11_resize_default_render_target();
@@ -10137,7 +10237,6 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     #endif
                     _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
                 }
-                */
                 break;
             case WM_NCLBUTTONDOWN:
                 /* workaround for half-second pause when starting to move window
@@ -10556,10 +10655,13 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
                 DispatchMessageW(&msg);
             }
         }
+        // NOTE: keep the frame callback before the resize event,
+        // otherwise it could happen that the app receives a resize
+        // event before init had been called
         _sapp_win32_frame(false);
-        // check for window resized, this cannot happen in WM_SIZE as it explodes memory usage
+        // check for window resized (also called in WndProc during modal resize loop)
         // NOTE: when Vulkan is active, _sapp_win32_update_dimensions() will never return true,
-        // instead the resize-event is fixed by the swapchain management code
+        // instead the resize-event is fired by the swapchain management code
         if (_sapp_win32_update_dimensions()) {
             #if defined(SOKOL_D3D11)
             _sapp_d3d11_resize_default_render_target();
@@ -15013,7 +15115,7 @@ SOKOL_API_IMPL const void* sapp_ios_get_window(void) {
 SOKOL_API_IMPL const void* sapp_d3d11_get_swap_chain(void) {
     SOKOL_ASSERT(_sapp.valid);
 #if defined(SOKOL_D3D11)
-    return _sapp.d3d11.swap_chain;
+    return _sapp.dxgi.swapchain;
 #else
     return 0;
 #endif
